@@ -2,6 +2,14 @@
  * Google Apps Script 服務
  * 
  * 用於與 Google Apps Script Web App 通信，將數據寫入 Google Sheets
+ * 
+ * ⚠️ 重要：CORS 處理技巧
+ * 
+ * 使用 text/plain 作為 Content-Type 可以避開 CORS 預檢請求（OPTIONS），
+ * 這對於 Google Apps Script 特別有效，因為它不需要手動設置 CORS headers。
+ * 
+ * 雖然 Content-Type 是 text/plain，但 body 仍然是 JSON 字符串，
+ * Google Apps Script 可以正常解析 JSON.parse()。
  */
 
 /**
@@ -10,7 +18,6 @@
 export interface LoginRequest {
   action: 'login';
   userId: string;
-  email: string;
   timestamp: string;
 }
 
@@ -28,24 +35,25 @@ export interface GasResponse {
  * 
  * @param url Google Apps Script Web App URL
  * @param userId 用戶 ID
- * @param email 電子郵件
  * @returns API 響應
  */
 export async function submitLoginToGAS(
   url: string,
-  userId: string,
-  email: string
+  userId: string
 ): Promise<GasResponse> {
   try {
+    // 使用 text/plain 避免 CORS 預檢請求（OPTIONS）
+    // 這對於 Google Apps Script 特別有效
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        // 關鍵：使用 text/plain 可以避開預檢請求
+        'Content-Type': 'text/plain;charset=utf-8',
       },
+      // body 仍然是 JSON 字符串，Google Apps Script 可以正常解析
       body: JSON.stringify({
         action: 'login',
         userId,
-        email,
         timestamp: new Date().toISOString(),
       } as LoginRequest),
     });

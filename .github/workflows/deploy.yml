@@ -34,9 +34,10 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          # 如果需要在構建時使用環境變數，可以在 GitHub Secrets 中設置
-          # VITE_GAS_URL: ${{ secrets.VITE_GAS_URL }}
-          # VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
+          # 環境變數從 GitHub Secrets 讀取（如果已設置）
+          # 需要在 GitHub 倉庫 Settings → Secrets and variables → Actions 中添加
+          VITE_GAS_URL: ${{ secrets.VITE_GAS_URL || '' }}
+          VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY || '' }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

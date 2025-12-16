@@ -243,7 +243,10 @@ function App() {
             }
           }
         } catch (error) {
-          console.error('查詢股票失敗:', error);
+          // 只在開發環境中輸出詳細錯誤
+          if (import.meta.env.DEV) {
+            console.error('查詢股票失敗:', error);
+          }
           // 只有在查詢仍然相同時才顯示錯誤
           if (searchQueryRef.current.trim() === currentQuery) {
             setSearchError('查詢失敗，請稍後再試');
