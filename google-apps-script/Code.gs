@@ -9,8 +9,16 @@
  * 
  * Google Apps Script 的 ContentService API 不支持手動設置 HTTP headers（包括 CORS headers）。
  * CORS headers 會根據部署權限自動設置：
- * - 如果部署權限設置為「任何人」，Google 會自動添加 CORS headers
- * - 如果部署權限設置為「僅限我自己」，Google 不會添加 CORS headers
+ * - ✅ 如果部署權限設置為「任何人」，Google 會自動添加 CORS headers（支持跨域請求）
+ * - ❌ 如果部署權限設置為「僅限我自己」，Google 不會添加 CORS headers（會導致 CORS 錯誤）
+ * 
+ * 解決 CORS 問題的唯一方法：
+ * 1. 前往 Google Apps Script 編輯器
+ * 2. 點擊「部署」→「管理部署」
+ * 3. 編輯部署，設置「具有存取權的使用者」為「任何人」
+ * 4. 點擊「重新部署」
+ * 
+ * 詳細說明請參考：BACKEND_CORS_FIX.md
  * 
  * 標準後端應該設置的 CORS headers（參考 CORS_TECHNICAL_GUIDE.md）：
  * - Access-Control-Allow-Origin: 指定允許的來源

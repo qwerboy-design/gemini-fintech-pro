@@ -42,21 +42,35 @@ export async function submitLoginToGAS(
   userId: string
 ): Promise<GasResponse> {
   try {
-    // 使用 text/plain 避免 CORS 預檢請求（OPTIONS）
-    // 這對於 Google Apps Script 特別有效
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        // 關鍵：使用 text/plain 可以避開預檢請求
-        'Content-Type': 'text/plain;charset=utf-8',
-      },
-      // body 仍然是 JSON 字符串，Google Apps Script 可以正常解析
-      body: JSON.stringify({
-        action: 'login',
-        userId,
-        timestamp: new Date().toISOString(),
-      } as LoginRequest),
-    });
+    const requestBody = JSON.stringify({
+      action: 'login',
+      userId,
+      timestamp: new Date().toISOString(),
+    } as LoginRequest);
+
+    let response: Response;
+    
+    // 策略 1: 完全不設置 Content-Type header（最簡單的請求）
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        // 不設置任何 headers，讓瀏覽器自動處理，完全避免 CORS 預檢
+        body: requestBody,
+        mode: 'cors',
+      });
+    } catch (firstError) {
+      // 策略 2: 使用 text/plain Content-Type（如果方法 1 失敗）
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          // 關鍵：使用 text/plain 可以避開預檢請求
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        // body 仍然是 JSON 字符串，Google Apps Script 可以正常解析
+        body: requestBody,
+        mode: 'cors',
+      });
+    }
 
     if (!response.ok) {
       const errorText = await response.text();

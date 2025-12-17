@@ -1,6 +1,6 @@
 # 部署狀態報告
 
-**部署時間**: 2025-12-16 21:00+ (最新)  
+**部署時間**: 2025-12-16 22:00+ (最新)  
 **部署方式**: GitHub Pages (gh-pages)
 
 ---
@@ -30,8 +30,8 @@
 ```
 dist/index.html                   0.53 kB (gzip: 0.31 kB)
 dist/assets/index-DjLL73eJ.css   22.82 kB (gzip: 5.52 kB)
-dist/assets/index-BfCvJmL9.js   334.49 kB (gzip: 106.85 kB)
-構建時間: 759ms
+dist/assets/index-YtNFEaK7.js   334.90 kB (gzip: 107.04 kB)
+構建時間: 407ms
 ```
 
 - ✅ TypeScript 編譯成功
@@ -172,6 +172,7 @@ VITE_GAS_URL=https://script.google.com/macros/s/AKfycbzoEKE_10KGmlx8DfLgPa1SohOU
 
 ---
 
-**最後更新**: 2025-12-16 21:00+  
+**最後更新**: 2025-12-16 22:00+  
 **部署狀態**: ✅ **成功部署**  
-**Google Apps Script 狀態**: ✅ **授權已完成，Sheet 訪問正常**
+**Google Apps Script 狀態**: ✅ **授權已完成，Sheet 訪問正常**  
+**CORS 優化**: ✅ **前端雙重策略已實現**（無 headers → text/plain）

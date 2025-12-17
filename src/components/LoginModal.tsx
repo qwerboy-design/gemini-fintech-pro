@@ -80,37 +80,77 @@ export function LoginModal({
       }
 
       // 使用 fetch 發送請求
-      // 關鍵：使用 text/plain 作為 Content-Type 可以避開 CORS 預檢請求（OPTIONS）
-      // 這是解決 Google Apps Script CORS 問題的有效方法
-      const response = await fetch(gasUrl, {
-        method: 'POST',
-        headers: {
-          // 使用 text/plain 避免預檢請求，但 body 仍然是 JSON 字符串
-          'Content-Type': 'text/plain;charset=utf-8',
-        },
-        body: JSON.stringify({
-          action: 'login',
-          userId: formData.userId.trim(),
-          timestamp: new Date().toISOString(),
-        }),
-      }).catch((fetchError) => {
-        // 只在開發環境中輸出詳細錯誤
+      // 關鍵：嘗試多種方法避免 CORS 預檢請求
+      const requestBody = JSON.stringify({
+        action: 'login',
+        userId: formData.userId.trim(),
+        timestamp: new Date().toISOString(),
+      });
+
+      let response: Response | null = null;
+      let fetchError: unknown = null;
+
+      // 策略 1: 完全不設置 Content-Type header（讓瀏覽器自動處理，最簡單的請求）
+      try {
+        response = await fetch(gasUrl, {
+          method: 'POST',
+          // 關鍵：不設置任何 headers，讓瀏覽器自動處理
+          // 這樣會變成最簡單的請求，完全避免 CORS 預檢
+          body: requestBody,
+          mode: 'cors',
+        });
+        
+        // 請求成功（沒有拋出異常），繼續處理響應
+        fetchError = null;
+      } catch (firstError) {
+        fetchError = firstError;
         if (import.meta.env.DEV) {
-          console.error('Fetch 錯誤詳情:', fetchError);
+          console.warn('方法 1 失敗（無 headers），嘗試方法 2 (text/plain):', firstError);
         }
-        // 如果是網絡錯誤，提供更詳細的訊息
-        if (fetchError.message === 'Failed to fetch' || fetchError.name === 'TypeError') {
+        
+        // 策略 2: 使用 text/plain Content-Type（簡單請求的 Content-Type）
+        try {
+          response = await fetch(gasUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'text/plain;charset=utf-8',
+            },
+            body: requestBody,
+            mode: 'cors',
+          });
+          fetchError = null; // 清除錯誤，因為方法 2 成功了
+        } catch (secondError) {
+          fetchError = secondError;
+          response = null; // 確保 response 為 null
+          // 兩種方法都失敗，準備拋出詳細錯誤
+          if (import.meta.env.DEV) {
+            console.error('所有方法都失敗:', { firstError, secondError });
+          }
+        }
+      }
+
+      // 如果所有方法都失敗或 response 為 null，拋出詳細錯誤
+      if (!response) {
+        const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError || '無法獲取響應');
+        if (errorMessage.includes('Failed to fetch') || 
+            errorMessage.includes('CORS') ||
+            errorMessage.includes('blocked') ||
+            fetchError instanceof TypeError) {
           throw new Error(
-            '無法連接到 Google Apps Script。可能的原因：\n' +
-            '1. Google Apps Script URL 不正確\n' +
-            '2. 網絡連接問題\n' +
-            '3. CORS 策略限制\n' +
-            '4. Google Apps Script 未正確部署\n\n' +
-            '請參考 LOGIN_TROUBLESHOOTING.md 進行故障排除。'
+            '無法連接到 Google Apps Script（CORS 錯誤）。\n\n' +
+            '請確認以下設置：\n' +
+            '1. ✓ 前往 Google Apps Script 編輯器\n' +
+            '2. ✓ 點擊「部署」→「管理部署」\n' +
+            '3. ✓ 編輯部署，設置「具有存取權的使用者」為「任何人」\n' +
+            '4. ✓ 點擊「重新部署」\n\n' +
+            '詳細說明請參考：CORS_QUICK_FIX.md 或 LOGIN_TROUBLESHOOTING.md'
           );
         }
-        throw fetchError;
-      });
+        if (fetchError) {
+          throw fetchError;
+        }
+        throw new Error('請求失敗：無法獲取響應');
+      }
 
       // 檢查響應狀態
       if (!response.ok) {
