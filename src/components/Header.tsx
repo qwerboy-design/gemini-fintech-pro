@@ -9,6 +9,7 @@ interface HeaderProps {
   onTabChange: (tab: TabType) => void;
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
+  onSearchSubmit?: () => void | Promise<void>;
   searchHistory?: string[];
   onRemoveFromSearchHistory?: (query: string) => void;
   favoritesCount?: number;
@@ -26,6 +27,7 @@ export function Header({
   onTabChange,
   searchQuery,
   onSearchQueryChange,
+  onSearchSubmit,
   searchHistory = [],
   onRemoveFromSearchHistory,
   favoritesCount = 0,
@@ -96,9 +98,13 @@ export function Header({
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // 搜索邏輯已由父組件處理，這裡只處理 UI
     if (!searchQuery.trim()) {
       setShowSearch(false);
+      return;
+    }
+    // 觸發父組件的搜尋函數
+    if (onSearchSubmit) {
+      onSearchSubmit();
     }
   };
 
@@ -160,15 +166,20 @@ export function Header({
                     onChange={(e) => handleSearchChange(e.target.value)}
                     onFocus={handleSearchFocus}
                     onBlur={handleSearchBlur}
-                    placeholder="搜索股票名稱或代碼... (Ctrl+K)"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleSearchSubmit(e);
+                      }
+                    }}
+                    placeholder="搜索股票名稱或代碼... (Enter 或點擊搜尋按鈕)"
                     disabled={isSearching}
-                    className={`w-full px-4 py-2 pr-10 bg-gray-800 border rounded-lg text-white placeholder-gray-500 focus:outline-none transition-colors ${
+                    className={`w-full px-4 py-2 pr-24 bg-gray-800 border rounded-l-lg rounded-r-none text-white placeholder-gray-500 focus:outline-none transition-colors ${
                       searchError
                         ? 'border-red-500 focus:border-red-600'
                         : 'border-gray-700 focus:border-purple-600'
                     } ${isSearching ? 'opacity-50 cursor-wait' : ''}`}
                   />
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                  <div className="absolute right-16 top-1/2 -translate-y-1/2 flex items-center gap-1">
                     {isSearching && (
                       <Loader2 size={16} className="text-purple-500 animate-spin" />
                     )}
@@ -191,6 +202,17 @@ export function Header({
                       </button>
                     )}
                   </div>
+                  <button
+                    type="submit"
+                    disabled={isSearching || !searchQuery.trim()}
+                    className={`absolute right-0 top-0 bottom-0 px-4 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-r-lg transition-colors flex items-center gap-2 ${
+                      isSearching ? 'opacity-50' : ''
+                    }`}
+                    title="搜尋股票"
+                  >
+                    <Search size={16} />
+                    <span className="text-sm">搜尋</span>
+                  </button>
                   {searchError && !isSearching && (
                     <div className="absolute top-full left-0 right-0 mt-1 px-3 py-2 bg-red-900/50 border border-red-700 rounded text-xs text-red-300">
                       {searchError}
@@ -324,3 +346,4 @@ export function Header({
     </header>
   );
 }
+
