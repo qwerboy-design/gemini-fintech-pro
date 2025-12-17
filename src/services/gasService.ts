@@ -3,7 +3,7 @@
  * 
  * 用於與 Google Apps Script Web App 通信，將數據寫入 Google Sheets
  * 
- * ⚠️ 重要：CORS 處理技巧
+ * [重要] CORS 處理技巧
  * 
  * 使用 text/plain 作為 Content-Type 可以避開 CORS 預檢請求（OPTIONS），
  * 這對於 Google Apps Script 特別有效，因為它不需要手動設置 CORS headers。
@@ -19,6 +19,54 @@ export interface LoginRequest {
   action: 'login';
   userId: string;
   timestamp: string;
+}
+
+/**
+ * 股票數據
+ */
+export interface StockData {
+  symbol: string;
+  name: string;
+  price: number;
+  change: number;
+  volume?: number;
+  chips?: number;
+  buySellRatio?: number;
+}
+
+/**
+ * 儲存股票請求數據
+ */
+export interface SaveStockRequest {
+  action: 'saveStock';
+  userId: string;
+  stock: StockData;
+}
+
+/**
+ * 刪除股票請求數據
+ */
+export interface DeleteStockRequest {
+  action: 'deleteStock';
+  userId: string;
+  stockSymbol: string;
+}
+
+/**
+ * 獲取用戶股票請求數據
+ */
+export interface GetUserStocksRequest {
+  action: 'getUserStocks';
+  userId: string;
+}
+
+/**
+ * 獲取用戶股票響應數據
+ */
+export interface GetUserStocksResponse extends GasResponse {
+  data?: {
+    stocks: StockData[];
+  };
 }
 
 /**
@@ -95,6 +143,228 @@ export async function submitLoginToGAS(
 }
 
 /**
+ * 儲存股票資訊到 Google Apps Script
+ * 
+ * @param url Google Apps Script Web App URL
+ * @param userId 用戶 ID
+ * @param stock 股票資料
+ * @returns API 響應
+ */
+export async function saveStockToGAS(
+  url: string,
+  userId: string,
+  stock: StockData
+): Promise<GasResponse> {
+  try {
+    const requestBody = JSON.stringify({
+      action: 'saveStock',
+      userId,
+      stock,
+    } as SaveStockRequest);
+
+    let response: Response;
+
+    // 策略 1: 完全不設置 Content-Type header（最簡單的請求）
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        body: requestBody,
+        mode: 'cors',
+      });
+    } catch (firstError) {
+      // 策略 2: 使用 text/plain Content-Type（如果方法 1 失敗）
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: requestBody,
+        mode: 'cors',
+      });
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.message || errorMessage;
+      } catch {
+        errorMessage = errorText || errorMessage;
+      }
+
+      throw new Error(errorMessage);
+    }
+
+    const responseText = await response.text();
+    
+    let result: GasResponse;
+    try {
+      result = JSON.parse(responseText) as GasResponse;
+    } catch (parseError) {
+      throw new Error('無法解析伺服器響應: ' + String(parseError));
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('GAS API 錯誤 (saveStock):', error);
+    throw error;
+  }
+}
+
+/**
+ * 從 Google Apps Script 刪除股票記錄
+ * 
+ * @param url Google Apps Script Web App URL
+ * @param userId 用戶 ID
+ * @param stockSymbol 股票代號
+ * @returns API 響應
+ */
+export async function deleteStockFromGAS(
+  url: string,
+  userId: string,
+  stockSymbol: string
+): Promise<GasResponse> {
+  try {
+    const requestBody = JSON.stringify({
+      action: 'deleteStock',
+      userId,
+      stockSymbol,
+    } as DeleteStockRequest);
+
+    let response: Response;
+
+    // 策略 1: 完全不設置 Content-Type header（最簡單的請求）
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        body: requestBody,
+        mode: 'cors',
+      });
+    } catch (firstError) {
+      // 策略 2: 使用 text/plain Content-Type（如果方法 1 失敗）
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: requestBody,
+        mode: 'cors',
+      });
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.message || errorMessage;
+      } catch {
+        errorMessage = errorText || errorMessage;
+      }
+
+      throw new Error(errorMessage);
+    }
+
+    const result = await response.json();
+    return result as GasResponse;
+  } catch (error) {
+    console.error('GAS API 錯誤 (deleteStock):', error);
+    throw error;
+  }
+}
+
+/**
+ * 從 Google Apps Script 獲取用戶的所有股票記錄（每個股票代號只返回最新一筆）
+ * 
+ * @param url Google Apps Script Web App URL
+ * @param userId 用戶 ID
+ * @returns API 響應
+ */
+export async function getUserStocksFromGAS(
+  url: string,
+  userId: string
+): Promise<GetUserStocksResponse> {
+  try {
+    const requestBody = JSON.stringify({
+      action: 'getUserStocks',
+      userId,
+    } as GetUserStocksRequest);
+
+    let response: Response;
+
+    // 策略 1: 完全不設置 Content-Type header（最簡單的請求）
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        body: requestBody,
+        mode: 'cors',
+      });
+    } catch (firstError) {
+      // 策略 2: 使用 text/plain Content-Type（如果方法 1 失敗）
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: requestBody,
+        mode: 'cors',
+      });
+    }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:317',message:'getUserStocksFromGAS response status',data:{ok:response.ok,status:response.status,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.message || errorMessage;
+      } catch {
+        errorMessage = errorText || errorMessage;
+      }
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:328',message:'getUserStocksFromGAS HTTP error',data:{status:response.status,errorMessage:errorMessage},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
+
+      throw new Error(errorMessage);
+    }
+
+    const responseText = await response.text();
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:335',message:'getUserStocksFromGAS response text',data:{responseText:responseText.substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
+    
+    let result: GetUserStocksResponse;
+    try {
+      result = JSON.parse(responseText) as GetUserStocksResponse;
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:343',message:'getUserStocksFromGAS parsed result',data:{success:result.success,message:result.message,hasData:!!result.data,stocksCount:result.data?.stocks?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
+    } catch (parseError) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:348',message:'getUserStocksFromGAS parse error',data:{error:String(parseError),responseText:responseText.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
+      
+      throw new Error('無法解析伺服器響應: ' + String(parseError));
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('GAS API 錯誤 (getUserStocks):', error);
+    throw error;
+  }
+}
+
+/**
  * 測試 Google Apps Script 連接
  * 
  * @param url Google Apps Script Web App URL
@@ -112,3 +382,4 @@ export async function testGASConnection(url: string): Promise<boolean> {
     return false;
   }
 }
+
