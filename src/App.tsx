@@ -321,7 +321,7 @@ function App() {
       
       if (result.success && result.data && result.data.stocks) {
         // 將 StockData 轉換為 Stock 格式
-        const stocks: Stock[] = result.data.stocks.map((stockData) => ({
+        const stocks: Stock[] = result.data.stocks.map((stockData: StockData) => ({
           symbol: stockData.symbol,
           name: stockData.name,
           price: stockData.price,
@@ -479,7 +479,7 @@ function App() {
   };
 
   // 刪除股票（隱藏 + 資料庫同步）
-  const handleDeleteStock = async (symbol: string) => {
+  const handleDeleteStock = async (symbol: string): Promise<void> => {
     // 找到要刪除的股票資訊（用於確認對話框）
     const stockToDelete = filteredAndSortedStocks.find(s => s.symbol === symbol);
     const stockName = stockToDelete?.name || symbol;
