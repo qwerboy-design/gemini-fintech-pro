@@ -699,7 +699,7 @@ function App() {
     <div className="min-h-screen bg-black text-white">
                   <Header
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={(tab: TabType) => setActiveTab(tab)}
         searchQuery={searchQuery}
         onSearchQueryChange={handleSearchQueryChange}
         onSearchSubmit={handleSearchSubmit}
