@@ -5,12 +5,12 @@
  * 1. 處理登入請求
  * 2. 將用戶資訊寫入 Google Sheets
  * 
- * ⚠️ 重要：關於 CORS Headers
+ * [重要] 關於 CORS Headers
  * 
  * Google Apps Script 的 ContentService API 不支持手動設置 HTTP headers（包括 CORS headers）。
  * CORS headers 會根據部署權限自動設置：
- * - ✅ 如果部署權限設置為「任何人」，Google 會自動添加 CORS headers（支持跨域請求）
- * - ❌ 如果部署權限設置為「僅限我自己」，Google 不會添加 CORS headers（會導致 CORS 錯誤）
+ * - [成功] 如果部署權限設置為「任何人」，Google 會自動添加 CORS headers（支持跨域請求）
+ * - [失敗] 如果部署權限設置為「僅限我自己」，Google 不會添加 CORS headers（會導致 CORS 錯誤）
  * 
  * 解決 CORS 問題的唯一方法：
  * 1. 前往 Google Apps Script 編輯器
@@ -32,13 +32,14 @@
  * 3. 創建 Google Sheet 並獲取 Sheet ID（在 Sheet URL 中）
  * 4. 更新下面的 SHEET_ID 變數
  * 5. 部署為 Web App（部署 -> 新增部署 -> 類型：網頁應用程式）
- * 6. ⚠️ 執行權限必須設置為：任何人均可存取（才能自動添加 CORS headers）
+ * 6. [重要] 執行權限必須設置為：任何人均可存取（才能自動添加 CORS headers）
  * 7. 複製部署 URL 並設置為環境變數 VITE_GAS_URL
  */
 
 // ========== 配置 ==========
-const SHEET_ID = '1pB5UyKUcgQ4NU7yme1aDiLCWvr6gXHYq5CglWYj5IvU0QVzwi2z32nd9'; // 替換為您的 Google Sheet ID
-const SHEET_NAME = 'CursorFintechDB'; // Sheet 工作表名稱
+const SHEET_ID = '1zzpbZADRiJNd52OcK4sAxAzrDg5ZKuhgJhSzYPo9wS4'; // 替換為您的 Google Sheet ID
+const SHEET_NAME = 'CursorFintechDB'; // Sheet 工作表名稱 (用於登入記錄)
+const USER_STOCKS_SHEET_NAME = 'UserStocks'; // Sheet 工作表名稱 (用於股票資料)
 
 /**
  * 處理 HTTP GET 請求（用於測試連接）
@@ -86,13 +87,29 @@ function doOptions() {
  * postData.contents 都是字符串，可以直接用 JSON.parse() 解析。
  */
 function doPost(e) {
+  // #region agent log
+  Logger.log(JSON.stringify({location:'Code.gs:doPost:entry', message:'doPost entry', data:{hasPostData:!!e.postData, contentLength:e.postData?.contents?.length||0}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H4'}));
+  // #endregion
+  
   try {
     // 解析請求數據
     // 注意：即使 Content-Type 是 text/plain，內容仍然是 JSON 字符串
     let requestData;
     try {
+      if (!e.postData || !e.postData.contents) {
+        // #region agent log
+        Logger.log(JSON.stringify({location:'Code.gs:doPost:noPostData', message:'No postData in request', timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H4'}));
+        // #endregion
+        throw new Error('請求數據為空');
+      }
       requestData = JSON.parse(e.postData.contents);
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:doPost:parsed', message:'Request data parsed', data:{action:requestData?.action, userId:requestData?.userId}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H4'}));
+      // #endregion
     } catch (parseError) {
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:doPost:parseError', message:'JSON parse error', data:{error:parseError.toString()}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H4'}));
+      // #endregion
       const output = ContentService.createTextOutput(
         JSON.stringify({
           success: false,
@@ -104,20 +121,41 @@ function doPost(e) {
     
     // 根據 action 執行不同操作
     let result;
+    // #region agent log
+    Logger.log(JSON.stringify({location:'Code.gs:doPost:dispatch', message:'Dispatching to handler', data:{action:requestData.action}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H4'}));
+    // #endregion
+    
     if (requestData.action === 'login') {
       result = handleLogin(requestData);
+    } else if (requestData.action === 'saveStock') {
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:doPost:beforeHandleSaveStock', message:'About to call handleSaveStock', data:{requestData:requestData}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H4'}));
+      // #endregion
+      result = handleSaveStock(requestData);
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:doPost:afterHandleSaveStock', message:'handleSaveStock returned', data:{resultIsNotNull:!!result}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H4'}));
+      // #endregion
+    } else if (requestData.action === 'deleteStock') {
+      result = handleDeleteStock(requestData);
+    } else if (requestData.action === 'getUserStocks') {
+      result = handleGetUserStocks(requestData);
     } else {
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:doPost:unknownAction', message:'Unknown action', data:{action:requestData.action}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H4'}));
+      // #endregion
       result = ContentService.createTextOutput(
         JSON.stringify({
           success: false,
-          message: '未知的操作類型'
+          message: '未知的操作類型: ' + (requestData.action || '未指定')
         })
       ).setMimeType(ContentService.MimeType.JSON);
     }
     
     return result;
   } catch (error) {
-    Logger.log('doPost 錯誤: ' + error.toString());
+    // #region agent log
+    Logger.log(JSON.stringify({location:'Code.gs:doPost:error', message:'doPost caught error', data:{error:error.toString(), stack:error.stack}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H4'}));
+    // #endregion
     return ContentService.createTextOutput(
       JSON.stringify({
         success: false,
@@ -243,15 +281,15 @@ function testSheetAccess() {
     
     // 測試打開 Sheet
     const ss = SpreadsheetApp.openById(SHEET_ID);
-    Logger.log('✅ Sheet 打開成功');
+    Logger.log('[成功] Sheet 打開成功');
     
     // 測試查找工作表
     const sheet = ss.getSheetByName(SHEET_NAME);
     if (sheet) {
-      Logger.log('✅ 工作表 "' + SHEET_NAME + '" 已存在');
+      Logger.log('[成功] 工作表 "' + SHEET_NAME + '" 已存在');
       Logger.log('工作表行數: ' + sheet.getLastRow());
     } else {
-      Logger.log('⚠️ 工作表 "' + SHEET_NAME + '" 不存在，將在首次登入時自動創建');
+      Logger.log('[警告] 工作表 "' + SHEET_NAME + '" 不存在，將在首次登入時自動創建');
     }
     
     return {
@@ -262,7 +300,7 @@ function testSheetAccess() {
       sheetExists: !!sheet
     };
   } catch (error) {
-    Logger.log('❌ 錯誤: ' + error.toString());
+    Logger.log('[錯誤] 錯誤: ' + error.toString());
     return {
       success: false,
       message: 'Sheet 訪問測試失敗',
@@ -318,3 +356,805 @@ function initializeSheet() {
     throw error;
   }
 }
+
+/**
+ * 處理儲存股票請求
+ */
+function handleSaveStock(data) {
+  // #region agent log
+  Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:entry', message:'handleSaveStock entry', data:{userId:data?.userId, stockSymbol:data?.stock?.symbol, sheetId:SHEET_ID, sheetName:USER_STOCKS_SHEET_NAME}, timestamp:Date.now(), sessionId:'debug-session', runId:'run1', hypothesisId:'H1'}));
+  // #endregion
+  
+  try {
+    // 驗證必要欄位
+    if (!data || !data.userId || !data.stock || !data.stock.symbol) {
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:validationError', message:'Validation failed for handleSaveStock', data:{data:data}, timestamp:Date.now(), sessionId:'debug-session', runId:'run1', hypothesisId:'H1'}));
+      // #endregion
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: false,
+          message: '缺少必要欄位：userId 或 stock.symbol'
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 打開 Google Sheet
+    let ss;
+    try {
+      ss = SpreadsheetApp.openById(SHEET_ID);
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:openByIdSuccess', message:'Spreadsheet opened by ID', data:{sheetId:SHEET_ID, ssIsNotNull:!!ss}, timestamp:Date.now(), sessionId:'debug-session', runId:'run1', hypothesisId:'H1'}));
+      // #endregion
+    } catch (openError) {
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:openByIdError', message:'Failed to open spreadsheet by ID', data:{sheetId:SHEET_ID, error:openError.toString()}, timestamp:Date.now(), sessionId:'debug-session', runId:'run1', hypothesisId:'H1'}));
+      // #endregion
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: false,
+          message: '無法訪問 Google Sheet (SHEET_ID 錯誤或權限不足): ' + openError.toString()
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // 獲取或創建 UserStocks 工作表
+    let sheet = ss.getSheetByName(USER_STOCKS_SHEET_NAME);
+    // #region agent log
+    Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:getSheetByName', message:'Attempted to get UserStocks sheet', data:{sheetName:USER_STOCKS_SHEET_NAME, sheetIsNotNull:!!sheet}, timestamp:Date.now(), sessionId:'debug-session', runId:'run1', hypothesisId:'H1'}));
+    // #endregion
+    
+    if (!sheet) {
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:sheetNotFound', message:'UserStocks sheet not found, attempting to initialize', data:{sheetName:USER_STOCKS_SHEET_NAME}, timestamp:Date.now(), sessionId:'debug-session', runId:'run1', hypothesisId:'H1'}));
+      // #endregion
+      try {
+        sheet = initializeUserStocksSheet(ss);
+        // #region agent log
+        Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:initResult', message:'Initialize UserStocks sheet result', data:{sheetIsNotNull:!!sheet, sheetName:sheet?.getName()}, timestamp:Date.now(), sessionId:'debug-session', runId:'run1', hypothesisId:'H1'}));
+        // #endregion
+      } catch (initError) {
+        // #region agent log
+        Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:initFailed', message:'Failed to initialize UserStocks sheet', data:{initError:initError.toString()}, timestamp:Date.now(), sessionId:'debug-session', runId:'run1', hypothesisId:'H1'}));
+        // #endregion
+        return ContentService.createTextOutput(
+          JSON.stringify({
+            success: false,
+            message: '創建 UserStocks 工作表失敗: ' + initError.toString()
+          })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+    
+    // 再次確認 sheet 不為 null（防止初始化失敗但沒有拋出異常的情況）
+    if (!sheet) {
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:sheetStillNull', message:'UserStocks sheet is still null after initialization attempt', data:{sheetName:USER_STOCKS_SHEET_NAME}, timestamp:Date.now(), sessionId:'debug-session', runId:'run1', hypothesisId:'H1'}));
+      // #endregion
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: false,
+          message: 'UserStocks 工作表初始化後仍無法獲取，請檢查 SHEET_ID 和權限設置'
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // #region agent log
+    Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:sheetReady', message:'UserStocks sheet is ready before calling saveOrUpdateStock', data:{sheetName:sheet.getName(), sheetLastRow:sheet.getLastRow(), sheetIsNotNull:!!sheet, dataIsNotNull:!!data, dataUserId:data?.userId, dataStockSymbol:data?.stock?.symbol}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
+    // #endregion
+    
+    // 最終參數驗證（防禦性編程）
+    if (!sheet) {
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:finalSheetCheckFailed', message:'CRITICAL: Sheet is null before calling saveOrUpdateStock', timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
+      // #endregion
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: false,
+          message: '內部錯誤：無法獲取工作表對象，請聯繫管理員'
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    if (!data || !data.userId || !data.stock) {
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:finalDataCheckFailed', message:'CRITICAL: Data is invalid before calling saveOrUpdateStock', data:{data:data}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
+      // #endregion
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: false,
+          message: '內部錯誤：數據驗證失敗，請聯繫管理員'
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // 保存或更新股票記錄
+    // 使用局部常量確保參數不會被意外修改
+    const sheetToSave = sheet;
+    const dataToSave = data;
+    
+    // #region agent log
+    Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:aboutToCallSaveOrUpdate', message:'About to call saveOrUpdateStock - FINAL CHECK PASSED', data:{sheetIsNotNull:!!sheetToSave, dataIsNotNull:!!dataToSave, sheetName:sheetToSave?.getName(), userId:dataToSave?.userId, stockSymbol:dataToSave?.stock?.symbol, sheetType:typeof sheetToSave, dataType:typeof dataToSave}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
+    // #endregion
+    
+    // 最終驗證（使用局部常量）
+    if (!sheetToSave || !dataToSave) {
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:criticalValidationFailed', message:'CRITICAL: Parameters became null/undefined just before call', data:{sheetToSaveIsNull:!sheetToSave, dataToSaveIsNull:!dataToSave, originalSheetIsNotNull:!!sheet, originalDataIsNotNull:!!data}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
+      // #endregion
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: false,
+          message: '內部錯誤：參數驗證失敗，請聯繫管理員並檢查系統日誌'
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // 驗證 dataToSave 的結構
+    if (!dataToSave.userId || !dataToSave.stock || !dataToSave.stock.symbol) {
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:dataStructureInvalid', message:'CRITICAL: Data structure is invalid', data:{hasUserId:!!dataToSave.userId, hasStock:!!dataToSave.stock, hasStockSymbol:!!dataToSave.stock?.symbol}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
+      // #endregion
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: false,
+          message: '內部錯誤：數據結構不完整，請聯繫管理員'
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // #region agent log
+    Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:allChecksPassed', message:'All validation checks passed, calling saveOrUpdateStock', data:{sheetName:sheetToSave.getName(), userId:dataToSave.userId, stockSymbol:dataToSave.stock.symbol}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
+    // #endregion
+    
+    let result;
+    try {
+      // 明確傳遞局部常量
+      result = saveOrUpdateStock(sheetToSave, dataToSave);
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:saveOrUpdateStockReturned', message:'saveOrUpdateStock returned successfully', data:{resultIsNotNull:!!result, resultSuccess:result?.success}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
+      // #endregion
+    } catch (saveError) {
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:saveOrUpdateStockThrew', message:'saveOrUpdateStock threw an error', data:{error:saveError.toString(), errorName:saveError.name, errorMessage:saveError.message, stack:saveError.stack}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
+      // #endregion
+      throw saveError; // Re-throw to be caught by outer catch
+    }
+    // #region agent log
+    Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:returningResult', message:'Returning result from handleSaveStock', data:{resultSuccess:result?.success, resultMessage:result?.message}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
+    // #endregion
+    
+    return ContentService.createTextOutput(
+      JSON.stringify(result)
+    ).setMimeType(ContentService.MimeType.JSON);
+    
+  } catch (error) {
+    // #region agent log
+    Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:error', message:'handleSaveStock caught error', data:{error:error.toString(), errorName:error.name, stack:error.stack, errorMessage:error.message}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
+    // #endregion
+    
+    // 如果是參數錯誤，提供更詳細的錯誤訊息
+    if (error.name === 'InvalidParameterError') {
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: false,
+          message: '參數驗證失敗: ' + error.message + '。請檢查系統日誌。'
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    return ContentService.createTextOutput(
+      JSON.stringify({
+        success: false,
+        message: '儲存股票時發生錯誤: ' + error.toString()
+      })
+    ).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+/**
+ * 處理刪除股票請求
+ */
+function handleDeleteStock(data) {
+  // #region agent log
+  Logger.log(JSON.stringify({location:'Code.gs:handleDeleteStock:entry', message:'handleDeleteStock entry', data:{dataIsNotNull:!!data, dataType:typeof data, userId:data?.userId, stockSymbol:data?.stockSymbol}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H5'}));
+  // #endregion
+  
+  try {
+    // 驗證 data 本身是否存在
+    if (!data) {
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:handleDeleteStock:dataIsNull', message:'Data parameter is null or undefined', timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H5'}));
+      // #endregion
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: false,
+          message: '缺少請求數據'
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // 驗證必要欄位
+    if (!data.userId || !data.stockSymbol) {
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:handleDeleteStock:validationError', message:'Validation failed - missing required fields', data:{hasUserId:!!data.userId, hasStockSymbol:!!data.stockSymbol}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H5'}));
+      // #endregion
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: false,
+          message: '缺少必要欄位：userId 或 stockSymbol'
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 打開 Google Sheet
+    let ss;
+    try {
+      ss = SpreadsheetApp.openById(SHEET_ID);
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:handleDeleteStock:openByIdSuccess', message:'Spreadsheet opened by ID', data:{sheetId:SHEET_ID, ssIsNotNull:!!ss}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H5'}));
+      // #endregion
+    } catch (openError) {
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:handleDeleteStock:openByIdError', message:'Failed to open spreadsheet', data:{error:openError.toString()}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H5'}));
+      // #endregion
+      Logger.log('打開 Sheet 失敗: ' + openError.toString());
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: false,
+          message: '無法訪問 Google Sheet: ' + openError.toString()
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // 獲取 UserStocks 工作表
+    const sheet = ss.getSheetByName(USER_STOCKS_SHEET_NAME);
+    // #region agent log
+    Logger.log(JSON.stringify({location:'Code.gs:handleDeleteStock:getSheetByName', message:'Attempted to get UserStocks sheet', data:{sheetName:USER_STOCKS_SHEET_NAME, sheetIsNotNull:!!sheet}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H5'}));
+    // #endregion
+    
+    if (!sheet) {
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:handleDeleteStock:sheetNotFound', message:'UserStocks sheet not found', timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H5'}));
+      // #endregion
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: false,
+          message: 'UserStocks 工作表不存在'
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // 使用局部常量保存參數
+    const userIdToDelete = data.userId;
+    const stockSymbolToDelete = data.stockSymbol;
+    
+    // #region agent log
+    Logger.log(JSON.stringify({location:'Code.gs:handleDeleteStock:aboutToDelete', message:'About to call deleteStockRecord', data:{userId:userIdToDelete, stockSymbol:stockSymbolToDelete, sheetIsNotNull:!!sheet}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H5'}));
+    // #endregion
+    
+    // 刪除股票記錄
+    const result = deleteStockRecord(sheet, userIdToDelete, stockSymbolToDelete);
+    
+    return ContentService.createTextOutput(
+      JSON.stringify(result)
+    ).setMimeType(ContentService.MimeType.JSON);
+    
+  } catch (error) {
+    // #region agent log
+    Logger.log(JSON.stringify({location:'Code.gs:handleDeleteStock:error', message:'handleDeleteStock caught error', data:{error:error.toString(), errorName:error.name, errorMessage:error.message, stack:error.stack}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H5'}));
+    // #endregion
+    Logger.log('handleDeleteStock 錯誤: ' + error.toString());
+    return ContentService.createTextOutput(
+      JSON.stringify({
+        success: false,
+        message: '刪除股票時發生錯誤: ' + error.toString()
+      })
+    ).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+/**
+ * 初始化 UserStocks 工作表
+ * 
+ * @param {Spreadsheet} ss - Google Spreadsheet 對象（可選，如果不提供則自動打開）
+ * @returns {Sheet} 創建的 UserStocks 工作表
+ */
+function initializeUserStocksSheet(ss) {
+  // #region agent log
+  Logger.log(JSON.stringify({location:'Code.gs:initializeUserStocksSheet:entry', message:'initializeUserStocksSheet entry', data:{ssIsNotNull:!!ss, sheetName:USER_STOCKS_SHEET_NAME, sheetId:SHEET_ID}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H3'}));
+  // #endregion
+  
+  // 如果沒有傳入 ss 參數，自動打開 Spreadsheet
+  if (!ss) {
+    // #region agent log
+    Logger.log(JSON.stringify({location:'Code.gs:initializeUserStocksSheet:ssIsNull', message:'Spreadsheet parameter is null, attempting to open by ID', data:{sheetId:SHEET_ID}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H3'}));
+    // #endregion
+    try {
+      ss = SpreadsheetApp.openById(SHEET_ID);
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:initializeUserStocksSheet:openedById', message:'Opened spreadsheet by ID', data:{ssIsNotNull:!!ss}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H3'}));
+      // #endregion
+      if (!ss) {
+        // #region agent log
+        Logger.log(JSON.stringify({location:'Code.gs:initializeUserStocksSheet:ssStillNull', message:'openById returned null', timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H3'}));
+        // #endregion
+        throw new Error('SpreadsheetApp.openById 返回了 null 或 undefined');
+      }
+    } catch (openError) {
+      // #region agent log
+      Logger.log(JSON.stringify({location:'Code.gs:initializeUserStocksSheet:openError', message:'Failed to open spreadsheet', data:{error:openError.toString()}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H3'}));
+      // #endregion
+      Logger.log('打開 Sheet 失敗: ' + openError.toString());
+      throw new Error('無法打開 Google Sheet: ' + openError.toString());
+    }
+  }
+  
+  // 檢查工作表是否已存在
+  // #region agent log
+  Logger.log(JSON.stringify({location:'Code.gs:initializeUserStocksSheet:checkExisting', message:'Checking for existing sheet', data:{sheetName:USER_STOCKS_SHEET_NAME}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H3'}));
+  // #endregion
+  let existingSheet = ss.getSheetByName(USER_STOCKS_SHEET_NAME);
+  if (existingSheet) {
+    // #region agent log
+    Logger.log(JSON.stringify({location:'Code.gs:initializeUserStocksSheet:sheetExists', message:'Sheet already exists, returning', data:{sheetName:existingSheet.getName()}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H3'}));
+    // #endregion
+    return existingSheet;
+  }
+  
+  // 創建新工作表
+  // #region agent log
+  Logger.log(JSON.stringify({location:'Code.gs:initializeUserStocksSheet:creatingSheet', message:'Creating new sheet', data:{sheetName:USER_STOCKS_SHEET_NAME}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H3'}));
+  // #endregion
+  const sheet = ss.insertSheet(USER_STOCKS_SHEET_NAME);
+  // #region agent log
+  Logger.log(JSON.stringify({location:'Code.gs:initializeUserStocksSheet:sheetCreated', message:'Sheet created', data:{sheetIsNotNull:!!sheet}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H3'}));
+  // #endregion
+  
+  // 設置表頭
+  const headers = [
+    ['UserId', 'StockSymbol', 'StockName', 'Price', 'Change', 'Volume', 'Chips', 'BuySellRatio', 'CreatedAt', 'UpdatedAt']
+  ];
+  sheet.getRange(1, 1, 1, 10).setValues(headers);
+  
+  // 格式化表頭
+  const headerRange = sheet.getRange(1, 1, 1, 10);
+  headerRange.setFontWeight('bold');
+  headerRange.setBackground('#4285f4');
+  headerRange.setFontColor('#ffffff');
+  
+  // 設置列寬
+  sheet.setColumnWidth(1, 120); // UserId
+  sheet.setColumnWidth(2, 100); // StockSymbol
+  sheet.setColumnWidth(3, 150); // StockName
+  sheet.setColumnWidth(4, 100); // Price
+  sheet.setColumnWidth(5, 100); // Change
+  sheet.setColumnWidth(6, 120); // Volume
+  sheet.setColumnWidth(7, 100); // Chips
+  sheet.setColumnWidth(8, 120); // BuySellRatio
+  sheet.setColumnWidth(9, 180); // CreatedAt
+  sheet.setColumnWidth(10, 180); // UpdatedAt
+  
+  // #region agent log
+  Logger.log(JSON.stringify({location:'Code.gs:initializeUserStocksSheet:exit', message:'initializeUserStocksSheet exit', data:{sheetIsNotNull:!!sheet, sheetName:sheet?.getName()}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H3'}));
+  // #endregion
+  Logger.log('UserStocks 工作表已成功創建');
+  return sheet;
+}
+
+/**
+ * 獨立初始化 UserStocks 工作表（用於手動執行測試）
+ * 此函數不需要參數，可直接在 Google Apps Script 編輯器中執行
+ * 
+ * 使用方式：
+ * 1. 在 Google Apps Script 編輯器中選擇此函數
+ * 2. 點擊「執行」按鈕
+ * 3. 查看「執行記錄」確認結果
+ */
+function initializeUserStocksSheetStandalone() {
+  Logger.log('開始初始化 UserStocks 工作表...');
+  
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    
+    if (!ss) {
+      throw new Error('無法打開 Spreadsheet，openById 返回 null');
+    }
+    
+    const sheet = initializeUserStocksSheet(ss);
+    Logger.log('初始化成功！工作表行數: ' + sheet.getLastRow());
+    return sheet;
+  } catch (error) {
+    Logger.log('初始化失敗: ' + error.toString());
+    throw error;
+  }
+}
+
+/**
+ * 保存或更新股票記錄
+ * 
+ * @param {Sheet} sheet - Google Sheet 工作表對象
+ * @param {Object} data - 包含 userId 和 stock 的數據對象
+ */
+function saveOrUpdateStock(sheet, data) {
+  // #region agent log
+  Logger.log(JSON.stringify({location:'Code.gs:saveOrUpdateStock:entry', message:'saveOrUpdateStock entry', data:{sheetIsNotNull:!!sheet, dataIsNotNull:!!data, sheetType:typeof sheet, dataType:typeof data, userId:data?.userId, stockSymbol:data?.stock?.symbol}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
+  // #endregion
+  
+  // 嚴格參數驗證 - 必須在函數開頭立即檢查
+  if (!sheet) {
+    // #region agent log
+    Logger.log(JSON.stringify({location:'Code.gs:saveOrUpdateStock:sheetNull', message:'CRITICAL: Sheet parameter is null in saveOrUpdateStock', data:{callStack:'check logs above'}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
+    // #endregion
+    const error = new Error('sheet parameter is required');
+    error.name = 'InvalidParameterError';
+    throw error;
+  }
+  
+  if (!data) {
+    // #region agent log
+    Logger.log(JSON.stringify({location:'Code.gs:saveOrUpdateStock:dataNull', message:'CRITICAL: Data parameter is null in saveOrUpdateStock', data:{callStack:'check logs above'}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
+    // #endregion
+    const error = new Error('data parameter is required');
+    error.name = 'InvalidParameterError';
+    throw error;
+  }
+  
+  // 驗證 data 的結構
+  if (!data.userId || !data.stock || !data.stock.symbol) {
+    // #region agent log
+    Logger.log(JSON.stringify({location:'Code.gs:saveOrUpdateStock:dataInvalid', message:'Data structure is invalid', data:{hasUserId:!!data.userId, hasStock:!!data.stock, hasStockSymbol:!!data.stock?.symbol}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
+    // #endregion
+    const error = new Error('data must contain userId, stock, and stock.symbol');
+    error.name = 'InvalidParameterError';
+    throw error;
+  }
+  
+  const userId = data.userId;
+  const stock = data.stock;
+  
+  // #region agent log
+  Logger.log(JSON.stringify({location:'Code.gs:saveOrUpdateStock:paramsExtracted', message:'Params extracted in saveOrUpdateStock', data:{userId:userId, stockSymbol:stock?.symbol, stockName:stock?.name}, timestamp:Date.now(), sessionId:'debug-session', runId:'run1', hypothesisId:'H1'}));
+  // #endregion
+  
+  const now = new Date().toISOString();
+  
+  // 查找所有匹配的記錄（根據 UserId 和 StockSymbol 作為唯一鍵）
+  const lastRow = sheet.getLastRow();
+  const rowsToDelete = [];
+  let existingCreatedAt = null; // 保存原有記錄的 CreatedAt（如果存在）
+  let isUpdate = false;
+  
+  if (lastRow > 1) {
+    // 從第2行開始查找（跳過表頭）
+    // 讀取 UserId, StockSymbol, 和 CreatedAt（第9列）
+    const dataRange = sheet.getRange(2, 1, lastRow - 1, 9); // 讀取 UserId, StockSymbol, 以及到 CreatedAt 的所有列
+    const values = dataRange.getValues();
+    
+    for (let i = 0; i < values.length; i++) {
+      if (values[i][0] === userId && values[i][1] === stock.symbol) {
+        const rowNumber = i + 2; // +2 因為從第2行開始，且陣列索引從0開始
+        rowsToDelete.push(rowNumber);
+        
+        // 如果是第一筆匹配記錄，保存其 CreatedAt（Column 9，索引 8）
+        if (existingCreatedAt === null && values[i][8]) {
+          existingCreatedAt = values[i][8];
+        }
+        isUpdate = true;
+      }
+    }
+  }
+  
+  // 如果有匹配記錄，先刪除所有匹配的記錄（確保唯一性）
+  if (rowsToDelete.length > 0) {
+    // #region agent log
+    Logger.log(JSON.stringify({location:'Code.gs:saveOrUpdateStock:foundExistingRecords', message:'Found existing records to delete', data:{count:rowsToDelete.length, userId:userId, stockSymbol:stock.symbol, existingCreatedAt:existingCreatedAt}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
+    // #endregion
+    
+    // 從後往前刪除（避免刪除後行號變化影響後續刪除）
+    rowsToDelete.sort(function(a, b) { return b - a; });
+    
+    for (let i = 0; i < rowsToDelete.length; i++) {
+      sheet.deleteRow(rowsToDelete[i]);
+    }
+    
+    Logger.log('刪除舊記錄: ' + userId + ' - ' + stock.symbol + ' (共 ' + rowsToDelete.length + ' 筆)');
+  }
+  
+  // 準備要寫入的數據
+  // CreatedAt: 如果原有記錄存在，使用原有值；否則使用當前時間
+  const createdAt = existingCreatedAt || now;
+  
+  const rowData = [
+    userId,
+    stock.symbol || '',
+    stock.name || '',
+    stock.price || 0,
+    stock.change || 0,
+    stock.volume || '',
+    stock.chips || '',
+    stock.buySellRatio || '',
+    createdAt, // CreatedAt (保持原值或新建)
+    now // UpdatedAt (總是更新為當前時間)
+  ];
+  
+  // 新增記錄（無論是新增還是更新，都使用新增操作以確保唯一性）
+  sheet.appendRow(rowData);
+  
+  // #region agent log
+  Logger.log(JSON.stringify({location:'Code.gs:saveOrUpdateStock:rowAdded', message:'Stock record added', data:{userId:userId, stockSymbol:stock.symbol, isUpdate:isUpdate, deletedCount:rowsToDelete.length}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
+  // #endregion
+  
+  if (isUpdate) {
+    Logger.log('更新股票記錄: ' + userId + ' - ' + stock.symbol + ' (刪除 ' + rowsToDelete.length + ' 筆舊記錄後新增)');
+    return {
+      success: true,
+      message: '股票記錄已成功更新',
+      action: 'updated'
+    };
+  } else {
+    Logger.log('新增股票記錄: ' + userId + ' - ' + stock.symbol);
+    return {
+      success: true,
+      message: '股票記錄已成功新增',
+      action: 'created'
+    };
+  }
+}
+
+/**
+ * 刪除股票記錄（刪除指定 UserId 和股票代號的所有記錄）
+ */
+function deleteStockRecord(sheet, userId, stockSymbol) {
+  const lastRow = sheet.getLastRow();
+  
+  if (lastRow <= 1) {
+    return {
+      success: false,
+      message: '沒有找到要刪除的記錄'
+    };
+  }
+  
+  // 從第2行開始查找（跳過表頭）
+  const dataRange = sheet.getRange(2, 1, lastRow - 1, 2); // 只讀取 UserId 和 StockSymbol 列
+  const values = dataRange.getValues();
+  
+  // 收集所有匹配的行號（使用陣列收集所有匹配的記錄）
+  const rowsToDelete = [];
+  for (let i = 0; i < values.length; i++) {
+    if (values[i][0] === userId && values[i][1] === stockSymbol) {
+      rowsToDelete.push(i + 2); // +2 因為從第2行開始，且陣列索引從0開始
+    }
+  }
+  
+  if (rowsToDelete.length === 0) {
+    return {
+      success: false,
+      message: '未找到對應的股票記錄'
+    };
+  }
+  
+  // 從後往前刪除（避免刪除後行號變化影響後續刪除）
+  // 先對行號進行降序排序
+  rowsToDelete.sort(function(a, b) { return b - a; });
+  
+  // 依次刪除每一行
+  for (let i = 0; i < rowsToDelete.length; i++) {
+    sheet.deleteRow(rowsToDelete[i]);
+  }
+  
+  Logger.log('刪除股票記錄: ' + userId + ' - ' + stockSymbol + ' (共 ' + rowsToDelete.length + ' 筆)');
+  
+  return {
+    success: true,
+    message: '已成功刪除 ' + rowsToDelete.length + ' 筆股票記錄'
+  };
+}
+
+/**
+ * 獲取用戶的所有股票記錄（每個股票代號只返回最新一筆）
+ */
+function handleGetUserStocks(data) {
+  try {
+    // 驗證必要欄位
+    if (!data || !data.userId) {
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: false,
+          message: '缺少必要欄位：userId'
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    const userId = data.userId;
+
+    // 打開 Google Sheet
+    let ss;
+    try {
+      ss = SpreadsheetApp.openById(SHEET_ID);
+    } catch (openError) {
+      Logger.log('打開 Sheet 失敗: ' + openError.toString());
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: false,
+          message: '無法訪問 Google Sheet: ' + openError.toString()
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // 獲取 UserStocks 工作表
+    let sheet = ss.getSheetByName(USER_STOCKS_SHEET_NAME);
+    
+    if (!sheet) {
+      // 如果工作表不存在，返回空列表
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: true,
+          message: '沒有找到股票記錄',
+          data: {
+            stocks: []
+          }
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // 讀取所有數據（從第2行開始，跳過表頭）
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) {
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: true,
+          message: '沒有找到股票記錄',
+          data: {
+            stocks: []
+          }
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // 讀取所有列：UserId, StockSymbol, StockName, Price, Change, Volume, Chips, BuySellRatio, CreatedAt, UpdatedAt
+    const dataRange = sheet.getRange(2, 1, lastRow - 1, 10);
+    const values = dataRange.getValues();
+    
+    // 過濾該用戶的記錄
+    const userRecords = values.filter(row => row[0] === userId);
+    
+    if (userRecords.length === 0) {
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: true,
+          message: '沒有找到股票記錄',
+          data: {
+            stocks: []
+          }
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // 按股票代號分組，每個股票代號只保留最新一筆（按 UpdatedAt 排序）
+    // #region agent log
+    Logger.log('=== handleGetUserStocks: 開始處理 ' + userRecords.length + ' 筆記錄 ===');
+    // #endregion
+    
+    const stockMap = {};
+    userRecords.forEach((row, index) => {
+      const stockSymbol = row[1]; // StockSymbol
+      const updatedAt = row[9]; // UpdatedAt
+      
+      // #region agent log
+      Logger.log('處理記錄 ' + (index + 1) + ': symbol=' + stockSymbol + ', updatedAt=' + updatedAt + ' (type: ' + typeof updatedAt + ')');
+      // #endregion
+      
+      // 確保 updatedAt 是 Date 對象，如果是字符串則轉換
+      let updatedAtDate = null;
+      if (updatedAt) {
+        if (typeof updatedAt === 'string' && updatedAt.trim() !== '') {
+          updatedAtDate = new Date(updatedAt);
+          // 檢查是否為有效日期
+          if (isNaN(updatedAtDate.getTime())) {
+            updatedAtDate = null;
+          }
+        } else if (updatedAt && typeof updatedAt.getTime === 'function') {
+          // 已經是 Date 對象，檢查是否有效
+          if (!isNaN(updatedAt.getTime())) {
+            updatedAtDate = updatedAt;
+          }
+        }
+      }
+      
+      const existingRecord = stockMap[stockSymbol];
+      let shouldUpdate = false;
+      
+      if (!existingRecord) {
+        // #region agent log
+        Logger.log('  新股票代號，直接添加: ' + stockSymbol);
+        // #endregion
+        shouldUpdate = true;
+      } else if (!existingRecord.updatedAt) {
+        // #region agent log
+        Logger.log('  現有記錄沒有 updatedAt，更新: ' + stockSymbol);
+        // #endregion
+        shouldUpdate = true;
+      } else if (updatedAtDate && updatedAtDate.getTime && !isNaN(updatedAtDate.getTime())) {
+        // 將現有記錄的 updatedAt 也轉換為 Date
+        let existingUpdatedAt = existingRecord.updatedAt;
+        if (existingUpdatedAt) {
+          if (typeof existingUpdatedAt === 'string') {
+            existingUpdatedAt = new Date(existingUpdatedAt);
+          }
+          
+          // 檢查現有記錄的日期是否有效
+          if (existingUpdatedAt && existingUpdatedAt.getTime && !isNaN(existingUpdatedAt.getTime())) {
+            if (updatedAtDate.getTime() > existingUpdatedAt.getTime()) {
+              // #region agent log
+              Logger.log('  找到更新的記錄，更新: ' + stockSymbol + ' (新: ' + updatedAtDate.toISOString() + ', 舊: ' + existingUpdatedAt.toISOString() + ')');
+              // #endregion
+              shouldUpdate = true;
+            } else {
+              // #region agent log
+              Logger.log('  保留現有記錄（更新時間更舊）: ' + stockSymbol);
+              // #endregion
+            }
+          } else {
+            // #region agent log
+            Logger.log('  現有記錄日期無效，更新: ' + stockSymbol);
+            // #endregion
+            shouldUpdate = true;
+          }
+        } else {
+          // #region agent log
+          Logger.log('  現有記錄沒有 updatedAt，更新: ' + stockSymbol);
+          // #endregion
+          shouldUpdate = true;
+        }
+      } else {
+        // #region agent log
+        Logger.log('  當前記錄 updatedAt 無效，跳過: ' + stockSymbol);
+        // #endregion
+      }
+      
+      if (shouldUpdate) {
+        stockMap[stockSymbol] = {
+          symbol: stockSymbol,
+          name: row[2] || stockSymbol, // StockName
+          price: row[3] || 0, // Price
+          change: row[4] || 0, // Change
+          volume: row[5] || 0, // Volume
+          chips: row[6] || 0, // Chips
+          buySellRatio: row[7] || 0, // BuySellRatio
+          updatedAt: updatedAtDate || updatedAt // UpdatedAt（保存原始值或轉換後的值）
+        };
+      }
+    });
+    
+    // 轉換為陣列
+    const stocks = Object.values(stockMap);
+    
+    // #region agent log
+    Logger.log('=== 處理完成，共 ' + stocks.length + ' 個不同的股票代號 ===');
+    stocks.forEach((stock, index) => {
+      Logger.log('股票 ' + (index + 1) + ': ' + stock.symbol + ' - ' + stock.name + ' (updatedAt: ' + (stock.updatedAt ? (typeof stock.updatedAt.getTime === 'function' ? stock.updatedAt.toISOString() : stock.updatedAt) : 'null') + ')');
+    });
+    // #endregion
+    
+    return ContentService.createTextOutput(
+      JSON.stringify({
+        success: true,
+        message: '成功獲取股票記錄',
+        data: {
+          stocks: stocks
+        }
+      })
+    ).setMimeType(ContentService.MimeType.JSON);
+    
+  } catch (error) {
+    Logger.log('handleGetUserStocks 錯誤: ' + error.toString());
+    return ContentService.createTextOutput(
+      JSON.stringify({
+        success: false,
+        message: '獲取股票記錄時發生錯誤: ' + error.toString()
+      })
+    ).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+

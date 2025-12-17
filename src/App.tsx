@@ -6,6 +6,7 @@ import { StockTable } from './components/StockTable';
 import { LoginModal } from './components/LoginModal';
 import { mockStocks } from './data/mockStocks';
 import { queryStock } from './services/stockService';
+import { saveStockToGAS, deleteStockFromGAS, getUserStocksFromGAS, type StockData } from './services/gasService';
 import type { Stock } from './types/stock';
 import './App.css';
 
@@ -24,6 +25,7 @@ type SortType =
 
 const FAVORITES_STORAGE_KEY = 'gemini-fintech-favorites';
 const SEARCH_HISTORY_STORAGE_KEY = 'gemini-fintech-search-history';
+const HIDDEN_STOCKS_STORAGE_KEY = 'gemini-fintech-hidden-stocks';
 const MAX_SEARCH_HISTORY = 10;
 
 /**
@@ -81,6 +83,34 @@ function saveSearchHistoryToStorage(history: string[]) {
   }
 }
 
+/**
+ * 從 localStorage 載入隱藏的股票列表
+ */
+function loadHiddenStocksFromStorage(): Set<string> {
+  try {
+    const stored = localStorage.getItem(HIDDEN_STOCKS_STORAGE_KEY);
+    if (stored) {
+      const hiddenArray = JSON.parse(stored) as string[];
+      return new Set(hiddenArray);
+    }
+  } catch (error) {
+    console.error('載入隱藏股票列表失敗:', error);
+  }
+  return new Set();
+}
+
+/**
+ * 保存隱藏的股票列表到 localStorage
+ */
+function saveHiddenStocksToStorage(hiddenStocks: Set<string>) {
+  try {
+    const hiddenArray = Array.from(hiddenStocks);
+    localStorage.setItem(HIDDEN_STOCKS_STORAGE_KEY, JSON.stringify(hiddenArray));
+  } catch (error) {
+    console.error('保存隱藏股票列表失敗:', error);
+  }
+}
+
 function App() {
   // 標籤狀態
   const [activeTab, setActiveTab] = useState<TabType>('金額排行');
@@ -91,6 +121,11 @@ function App() {
   // 收藏狀態（從 localStorage 載入）
   const [favorites, setFavorites] = useState<Set<string>>(() =>
     loadFavoritesFromStorage()
+  );
+
+  // 隱藏的股票列表（從 localStorage 載入）
+  const [hiddenStocks, setHiddenStocks] = useState<Set<string>>(() =>
+    loadHiddenStocksFromStorage()
   );
 
   // 排序狀態
@@ -106,6 +141,9 @@ function App() {
 
   // 查詢到的股票（從 API）
   const [queriedStocks, setQueriedStocks] = useState<Stock[]>([]);
+
+  // 從資料庫載入的股票
+  const [userStocksFromDB, setUserStocksFromDB] = useState<Stock[]>([]);
 
   // 搜索載入狀態
   const [isSearching, setIsSearching] = useState(false);
@@ -132,6 +170,11 @@ function App() {
   useEffect(() => {
     saveFavoritesToStorage(favorites);
   }, [favorites]);
+
+  // 當隱藏股票列表改變時，保存到 localStorage
+  useEffect(() => {
+    saveHiddenStocksToStorage(hiddenStocks);
+  }, [hiddenStocks]);
 
   // 當搜索歷史改變時，保存到 localStorage
   useEffect(() => {
@@ -188,7 +231,7 @@ function App() {
     searchQueryRef.current = searchQuery;
   }, [searchQuery]);
 
-  // 處理搜索查詢改變（帶 debounce）
+  // 處理搜索查詢改變（只處理輸入變化，不自動觸發搜尋）
   const handleSearchQueryChange = (query: string) => {
     setSearchQuery(query);
     setSearchError(null);
@@ -205,63 +248,44 @@ function App() {
       return;
     }
 
-    // 檢查是否應該執行 API 查詢
-    // 如果查詢是純數字（股票代碼）且本地沒有，則查詢 API
-    const isSymbol = /^\d{4}$/.test(query.trim()); // 台灣股票代碼通常是 4 位數
-    const localMatch = mockStocks.find(
-      (s) =>
-        s.symbol.toLowerCase() === query.trim().toLowerCase() ||
-        s.name.toLowerCase().includes(query.trim().toLowerCase())
-    );
+    // 只處理本地過濾，不自動觸發 API 搜尋
+    // API 搜尋將由 handleSearchSubmit 按鈕觸發
+  };
 
-    // 如果是 4 位數股票代碼且本地沒有匹配，執行 API 查詢（帶 debounce）
-    if (isSymbol && !localMatch && query.trim().length === 4) {
-      // 保存當前查詢值，避免閉包陷阱
-      const currentQuery = query.trim();
-      
-      // 設置 debounce，避免頻繁請求
-      searchTimeoutRef.current = setTimeout(async () => {
-        // 檢查查詢是否仍然有效（用戶可能已經改變了輸入）
-        if (searchQueryRef.current.trim() !== currentQuery) {
-          // 查詢已改變，不執行操作
-          return;
-        }
+  // 處理搜尋按鈕點擊或 Enter 鍵觸發
+  const handleSearchSubmit = async () => {
+    const query = searchQuery.trim();
+    if (!query) {
+      return;
+    }
 
-        setIsSearching(true);
-        try {
-          const result = await queryStock(currentQuery, mockStocks, true);
-          // 再次檢查查詢是否仍然相同（雙重檢查）
-          if (searchQueryRef.current.trim() === currentQuery) {
-            if (result.found && result.stock) {
-              // 添加到查詢結果列表
-              setQueriedStocks([result.stock]);
-              // 添加到搜索歷史（addToSearchHistory 內部已有去重邏輯）
-              addToSearchHistory(currentQuery);
-            } else {
-              setSearchError(result.error || '找不到該股票');
-              setQueriedStocks([]);
-            }
-          }
-        } catch (error) {
-          // 只在開發環境中輸出詳細錯誤
-          if (import.meta.env.DEV) {
-            console.error('查詢股票失敗:', error);
-          }
-          // 只有在查詢仍然相同時才顯示錯誤
-          if (searchQueryRef.current.trim() === currentQuery) {
-            setSearchError('查詢失敗，請稍後再試');
-            setQueriedStocks([]);
-          }
-        } finally {
-          // 只有在查詢仍然相同時才清除載入狀態
-          if (searchQueryRef.current.trim() === currentQuery) {
-            setIsSearching(false);
-          }
-        }
-      }, 800); // 800ms debounce
-    } else {
-      // 本地匹配或名稱搜索，清除 API 查詢結果
+    // 清除之前的 timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    setIsSearching(true);
+    setSearchError(null);
+
+    try {
+      const result = await queryStock(query, mockStocks, true);
+      if (result.found && result.stock) {
+        // 添加到查詢結果列表
+        setQueriedStocks([result.stock]);
+        // 添加到搜索歷史（addToSearchHistory 內部已有去重邏輯）
+        addToSearchHistory(query);
+      } else {
+        setSearchError(result.error || '找不到該股票');
+        setQueriedStocks([]);
+      }
+    } catch (error) {
+      // 只在開發環境中輸出詳細錯誤
+      if (import.meta.env.DEV) {
+        console.error('查詢股票失敗:', error);
+      }
+      setSearchError('查詢失敗，請稍後再試');
       setQueriedStocks([]);
+    } finally {
       setIsSearching(false);
     }
   };
@@ -275,8 +299,70 @@ function App() {
     };
   }, []);
 
+  // 從資料庫載入用戶股票
+  const loadUserStocksFromDB = async (userId: string) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:295',message:'loadUserStocksFromDB called',data:{userId:userId,gasUrl:gasUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    
+    if (!gasUrl) {
+      if (import.meta.env.DEV) {
+        console.warn('GAS URL 未配置，無法載入用戶股票');
+      }
+      return;
+    }
+
+    try {
+      const result = await getUserStocksFromGAS(gasUrl, userId);
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:305',message:'getUserStocksFromGAS result',data:{success:result.success,hasData:!!result.data,stocksCount:result.data?.stocks?.length||0,stockSymbols:result.data?.stocks?.map((s:StockData)=>s.symbol)||[]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      
+      if (result.success && result.data && result.data.stocks) {
+        // 將 StockData 轉換為 Stock 格式
+        const stocks: Stock[] = result.data.stocks.map((stockData) => ({
+          symbol: stockData.symbol,
+          name: stockData.name,
+          price: stockData.price,
+          change: stockData.change,
+          volume: stockData.volume,
+          chips: stockData.chips,
+          buySellRatio: stockData.buySellRatio,
+          isFavorite: favorites.has(stockData.symbol),
+        }));
+
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:336',message:'About to set userStocksFromDB',data:{stocksCount:stocks.length,stockSymbols:stocks.map(s=>s.symbol),stocksDetails:stocks.map(s=>({symbol:s.symbol,name:s.name}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
+        
+        setUserStocksFromDB(stocks);
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:342',message:'userStocksFromDB state updated',data:{stocksCount:stocks.length,stockSymbols:stocks.map(s=>s.symbol)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
+        
+        if (import.meta.env.DEV) {
+          console.log(`成功載入 ${stocks.length} 筆股票記錄`);
+        }
+      } else {
+        setUserStocksFromDB([]);
+        if (import.meta.env.DEV) {
+          console.log('沒有找到股票記錄或載入失敗');
+        }
+      }
+    } catch (error) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:335',message:'loadUserStocksFromDB error',data:{error:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      
+      console.error('載入用戶股票失敗:', error);
+      setUserStocksFromDB([]);
+    }
+  };
+
   // 處理登入成功
-  const handleLoginSuccess = (userId: string) => {
+  const handleLoginSuccess = async (userId: string) => {
     setCurrentUser(userId);
     // 保存到 localStorage
     try {
@@ -285,6 +371,9 @@ function App() {
       console.error('保存用戶資訊失敗:', error);
     }
     setIsLoginModalOpen(false);
+    
+    // 載入用戶的股票記錄
+    await loadUserStocksFromDB(userId);
   };
 
   // 處理登入/登出點擊
@@ -292,6 +381,7 @@ function App() {
     if (currentUser) {
       // 登出
       setCurrentUser(null);
+      setUserStocksFromDB([]); // 清除資料庫股票
       try {
         localStorage.removeItem('gemini-fintech-user');
       } catch (error) {
@@ -311,24 +401,173 @@ function App() {
   };
 
   // 切換收藏狀態
-  const toggleFavorite = (symbol: string) => {
-    setFavorites((prev) => {
-      const newFavorites = new Set(prev);
-      if (newFavorites.has(symbol)) {
-        newFavorites.delete(symbol);
-      } else {
-        newFavorites.add(symbol);
+  // 處理收藏切換（加入收藏時顯示確認對話框，確認後寫入資料庫）
+  const toggleFavorite = async (symbol: string) => {
+    const isCurrentlyFavorite = favorites.has(symbol);
+    
+    // 如果是加入收藏，顯示確認對話框
+    if (!isCurrentlyFavorite) {
+      // 找到股票資訊（從當前顯示的股票列表中查找）
+      const stock = filteredAndSortedStocks.find(s => s.symbol === symbol) ||
+                    mockStocks.find(s => s.symbol === symbol) ||
+                    queriedStocks.find(s => s.symbol === symbol);
+      const stockName = stock?.name || symbol;
+      
+      // 顯示確認對話框
+      const confirmed = window.confirm(
+        `確定要收藏股票「${stockName} (${symbol})」嗎？\n\n收藏後將自動儲存到您的資料庫中。`
+      );
+      
+      if (!confirmed) {
+        return; // 用戶取消
       }
-      return newFavorites;
+      
+      // 更新收藏狀態
+      setFavorites((prev) => {
+        const newFavorites = new Set(prev);
+        newFavorites.add(symbol);
+        return newFavorites;
+      });
+      
+      // 如果用戶已登入，寫入資料庫
+      if (currentUser && gasUrl && stock) {
+        try {
+          const stockData: StockData = {
+            symbol: stock.symbol,
+            name: stock.name,
+            price: stock.price,
+            change: stock.change,
+            volume: stock.volume,
+            chips: stock.chips,
+            buySellRatio: stock.buySellRatio,
+          };
+          
+          const result = await saveStockToGAS(gasUrl, currentUser, stockData);
+          
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:441',message:'saveStockToGAS result received',data:{success:result.success,message:result.message,symbol:symbol},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          // #endregion
+          
+          if (result.success) {
+            if (import.meta.env.DEV) {
+              console.log('股票已儲存/更新到資料庫:', symbol);
+            }
+            // 後端已經處理唯一鍵（UserId, StockSymbol），儲存或更新都會正確處理
+            // 重新載入資料庫股票列表以顯示最新數據（30秒自動刷新也會確保同步）
+            await loadUserStocksFromDB(currentUser);
+          } else {
+            console.error('儲存股票失敗:', result.message);
+            alert(`儲存股票失敗: ${result.message || '未知錯誤'}`);
+          }
+        } catch (error) {
+          console.error('儲存股票時發生錯誤:', error);
+          alert('儲存股票時發生錯誤，請稍後再試');
+        }
+      } else if (!currentUser) {
+        // 未登入提示（收藏仍會成功，只是不會寫入資料庫）
+        // 可以選擇是否要顯示提示
+        // alert('提示：請先登入才能將股票儲存到資料庫。目前僅儲存在本地收藏列表中。');
+      }
+    } else {
+      // 取消收藏，不需要確認，直接執行
+      setFavorites((prev) => {
+        const newFavorites = new Set(prev);
+        newFavorites.delete(symbol);
+        return newFavorites;
+      });
+    }
+  };
+
+  // 刪除股票（隱藏 + 資料庫同步）
+  const handleDeleteStock = async (symbol: string) => {
+    // 找到要刪除的股票資訊（用於確認對話框）
+    const stockToDelete = filteredAndSortedStocks.find(s => s.symbol === symbol);
+    const stockName = stockToDelete?.name || symbol;
+
+    // 顯示確認對話框
+    const confirmed = window.confirm(
+      `確定要刪除股票「${stockName} (${symbol})」嗎？\n\n此操作將從您的列表中移除此股票。`
+    );
+
+    if (!confirmed) {
+      return; // 用戶取消刪除
+    }
+
+    // 如果用戶已登入，同步刪除資料庫記錄
+    if (currentUser && gasUrl) {
+      try {
+        const result = await deleteStockFromGAS(gasUrl, currentUser, symbol);
+        if (result.success) {
+          if (import.meta.env.DEV) {
+            console.log('股票已從資料庫刪除:', symbol);
+          }
+          // 重新載入資料庫股票列表以反映刪除操作
+          await loadUserStocksFromDB(currentUser);
+        } else {
+          console.error('刪除股票失敗:', result.message);
+          // 即使資料庫刪除失敗，仍然執行本地刪除
+        }
+      } catch (error) {
+        console.error('刪除股票時發生錯誤:', error);
+        // 即使發生錯誤，仍然執行本地刪除，避免影響用戶體驗
+      }
+    }
+
+    // 更新本地狀態（隱藏股票）
+    setHiddenStocks((prev) => {
+      const newHiddenStocks = new Set(prev);
+      newHiddenStocks.add(symbol);
+      return newHiddenStocks;
     });
   };
 
+  // 當用戶登入時，自動載入資料庫股票
+  useEffect(() => {
+    if (currentUser && gasUrl) {
+      loadUserStocksFromDB(currentUser);
+    }
+  }, [currentUser, gasUrl]); // 僅在用戶或 GAS URL 改變時觸發
+
+  // 當收藏狀態改變時，更新資料庫股票的收藏狀態
+  useEffect(() => {
+    setUserStocksFromDB((prev: Stock[]) =>
+      prev.map((stock: Stock) => ({
+        ...stock,
+        isFavorite: favorites.has(stock.symbol),
+      }))
+    );
+  }, [favorites]);
+
   // 過濾和排序股票
   const filteredAndSortedStocks = useMemo(() => {
-    // 合併本地股票和查詢到的股票
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:543',message:'filteredAndSortedStocks computing',data:{userStocksFromDBCount:userStocksFromDB.length,userStocksFromDBSymbols:userStocksFromDB.map(s=>s.symbol),queriedStocksCount:queriedStocks.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    
+    // 合併本地股票、資料庫股票和查詢到的股票
     let stocks = [...mockStocks];
     
-    // 如果查詢到了新股票，添加到列表中（去重）
+    // 添加從資料庫載入的股票（優先於 mockStocks，去重）
+    if (userStocksFromDB.length > 0) {
+      userStocksFromDB.forEach((dbStock: Stock) => {
+        const existingIndex = stocks.findIndex((s) => s.symbol === dbStock.symbol);
+        if (existingIndex >= 0) {
+          // 如果已存在，用資料庫的數據替換（資料庫數據更新）
+          stocks[existingIndex] = dbStock;
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:552',message:'Replaced existing stock with DB stock',data:{symbol:dbStock.symbol,index:existingIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          // #endregion
+        } else {
+          // 如果不存在，添加新股票
+          stocks.push(dbStock);
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:557',message:'Added new DB stock to list',data:{symbol:dbStock.symbol,name:dbStock.name,currentStocksCount:stocks.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          // #endregion
+        }
+      });
+    }
+    
+    // 如果查詢到了新股票，添加到列表中（去重，但優先級低於資料庫股票）
     if (queriedStocks.length > 0) {
       queriedStocks.forEach((queriedStock) => {
         const exists = stocks.some((s) => s.symbol === queriedStock.symbol);
@@ -337,6 +576,9 @@ function App() {
         }
       });
     }
+
+    // 過濾掉隱藏的股票
+    stocks = stocks.filter((stock) => !hiddenStocks.has(stock.symbol));
 
     // 更新收藏狀態
     stocks = stocks.map((stock) => ({
@@ -405,8 +647,53 @@ function App() {
       }));
     }
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:640',message:'filteredAndSortedStocks computed',data:{finalStocksCount:stocks.length,finalStockSymbols:stocks.map(s=>s.symbol)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    
     return stocks;
-  }, [activeStrategy, favorites, sortType, searchQuery, queriedStocks]);
+  }, [activeStrategy, favorites, sortType, searchQuery, queriedStocks, hiddenStocks, userStocksFromDB]);
+
+  // 追蹤已從資料庫載入的股票代號（避免重複儲存）
+  const loadedStockSymbolsRef = useRef<Set<string>>(new Set());
+
+  // 當資料庫股票載入完成後，更新已載入的股票代號集合
+  useEffect(() => {
+    if (userStocksFromDB.length > 0) {
+      const symbols = new Set(userStocksFromDB.map(stock => stock.symbol));
+      loadedStockSymbolsRef.current = symbols;
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:638',message:'Updated loadedStockSymbolsRef',data:{symbols:Array.from(symbols)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+    }
+  }, [userStocksFromDB]);
+
+  // 每30秒自動從資料庫讀取最新股票清單（確保資料同步）
+  useEffect(() => {
+    // 如果用戶未登入或沒有 GAS URL，跳過
+    if (!currentUser || !gasUrl) {
+      return;
+    }
+
+    // 立即載入一次
+    loadUserStocksFromDB(currentUser);
+
+    // 設置每30秒自動刷新
+    const intervalId = setInterval(() => {
+      if (currentUser && gasUrl) {
+        if (import.meta.env.DEV) {
+          console.log('自動刷新資料庫股票清單...');
+        }
+        loadUserStocksFromDB(currentUser);
+      }
+    }, 30000); // 30秒 = 30000毫秒
+
+    // 清理函數：組件卸載或依賴改變時清除定時器
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [currentUser, gasUrl]); // 依賴：用戶狀態、GAS URL
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -415,6 +702,7 @@ function App() {
         onTabChange={setActiveTab}
         searchQuery={searchQuery}
         onSearchQueryChange={handleSearchQueryChange}
+        onSearchSubmit={handleSearchSubmit}
         searchHistory={searchHistory}
         onRemoveFromSearchHistory={removeFromSearchHistory}
         favoritesCount={favorites.size}
@@ -445,6 +733,7 @@ function App() {
         <StockTable
           stocks={filteredAndSortedStocks}
           onToggleFavorite={toggleFavorite}
+          onDeleteStock={handleDeleteStock}
           sortType={sortType}
           onSortChange={setSortType}
         />
