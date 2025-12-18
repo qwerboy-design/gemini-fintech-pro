@@ -1176,5 +1176,56 @@ function handleGetUserStocks(data) {
   }
 }
 
-
+/**
+ * 測試 saveOrUpdateStock 函式（僅供測試使用）
+ * 
+ * 注意：此函式僅用於測試目的。在生產環境中，saveOrUpdateStock 應該只通過 handleSaveStock 被呼叫。
+ * 
+ * 使用方式：
+ * 1. 在 Google Apps Script 編輯器中選擇此函式
+ * 2. 點擊「執行」按鈕
+ * 3. 查看「執行記錄」確認結果
+ */
+function testSaveOrUpdateStock() {
+  try {
+    Logger.log('開始測試 saveOrUpdateStock...');
+    
+    // 打開 Spreadsheet
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    if (!ss) {
+      throw new Error('無法打開 Spreadsheet');
+    }
+    
+    // 獲取或創建 UserStocks 工作表
+    let sheet = ss.getSheetByName(USER_STOCKS_SHEET_NAME);
+    if (!sheet) {
+      sheet = initializeUserStocksSheet(ss);
+    }
+    
+    // 準備測試數據
+    const testData = {
+      userId: 'test-user-' + Date.now(),
+      stock: {
+        symbol: '2330',
+        name: '台積電',
+        price: 500,
+        change: 10,
+        volume: '1000000',
+        chips: 'institutional',
+        buySellRatio: '1.5'
+      }
+    };
+    
+    // 呼叫 saveOrUpdateStock
+    const result = saveOrUpdateStock(sheet, testData);
+    
+    Logger.log('測試成功！結果: ' + JSON.stringify(result));
+    return result;
+    
+  } catch (error) {
+    Logger.log('測試失敗: ' + error.toString());
+    Logger.log('錯誤堆疊: ' + (error.stack || '無堆疊資訊'));
+    throw error;
+  }
+}
 
