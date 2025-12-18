@@ -96,7 +96,7 @@ export async function getDailyMarketReport(): Promise<string> {
     });
 
     const apiPromise = genAI.models.generateContent({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.5-flash',
       contents: prompt,
     });
     const response = await Promise.race([apiPromise, timeoutPromise]);
