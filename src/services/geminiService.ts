@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 
 /**
  * Gemini API 服務
@@ -79,8 +79,7 @@ export async function getDailyMarketReport(): Promise<string> {
 
   try {
     // 初始化 Gemini API 客戶端
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const genAI = new GoogleGenAI({ apiKey });
 
     // 構建提示詞
     const prompt = `請提供今日台灣股市的重要資訊和分析，包括：
@@ -96,12 +95,14 @@ export async function getDailyMarketReport(): Promise<string> {
       setTimeout(() => reject(new Error('API 呼叫超時')), 30000); // 30 秒超時
     });
 
-    const apiPromise = model.generateContent(prompt);
+    const apiPromise = genAI.models.generateContent({
+      model: 'gemini-1.5-flash',
+      contents: prompt,
+    });
     const response = await Promise.race([apiPromise, timeoutPromise]);
 
     // 提取回應內容
-    const result = response.response;
-    let content = result.text();
+    let content = response.text;
 
     // 確保內容不超過 500 字
     if (content.length > 500) {
