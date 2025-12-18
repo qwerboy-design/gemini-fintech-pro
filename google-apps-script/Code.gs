@@ -509,11 +509,17 @@ function handleSaveStock(data) {
     
     let result;
     try {
-      // 明確傳遞局部常量
+      // 最終驗證參數有效性（在呼叫前最後一次檢查）
+      if (!sheetToSave || !dataToSave) {
+        throw new Error('參數驗證失敗：sheetToSave 或 dataToSave 為空');
+      }
+      
+      if (!dataToSave.userId || !dataToSave.stock || !dataToSave.stock.symbol) {
+        throw new Error('參數驗證失敗：dataToSave 結構不完整');
+      }
+      
+      // 明確傳遞參數，確保參數順序正確
       result = saveOrUpdateStock(sheetToSave, dataToSave);
-      // #region agent log
-      Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:saveOrUpdateStockReturned', message:'saveOrUpdateStock returned successfully', data:{resultIsNotNull:!!result, resultSuccess:result?.success}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
-      // #endregion
     } catch (saveError) {
       // #region agent log
       Logger.log(JSON.stringify({location:'Code.gs:handleSaveStock:saveOrUpdateStockThrew', message:'saveOrUpdateStock threw an error', data:{error:saveError.toString(), errorName:saveError.name, errorMessage:saveError.message, stack:saveError.stack}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
@@ -777,25 +783,22 @@ function initializeUserStocksSheetStandalone() {
  * @param {Object} data - 包含 userId 和 stock 的數據對象
  */
 function saveOrUpdateStock(sheet, data) {
-  // #region agent log
-  Logger.log(JSON.stringify({location:'Code.gs:saveOrUpdateStock:entry', message:'saveOrUpdateStock entry', data:{sheetIsNotNull:!!sheet, dataIsNotNull:!!data, sheetType:typeof sheet, dataType:typeof data, userId:data?.userId, stockSymbol:data?.stock?.symbol}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
-  // #endregion
-  
   // 嚴格參數驗證 - 必須在函數開頭立即檢查
-  if (!sheet) {
-    // #region agent log
-    Logger.log(JSON.stringify({location:'Code.gs:saveOrUpdateStock:sheetNull', message:'CRITICAL: Sheet parameter is null in saveOrUpdateStock', data:{callStack:'check logs above'}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
-    // #endregion
-    const error = new Error('sheet parameter is required');
+  // 檢查 arguments 對象以確保參數被正確傳遞
+  if (arguments.length < 2) {
+    const error = new Error('saveOrUpdateStock requires 2 parameters: sheet and data. Received ' + arguments.length + ' parameter(s)');
     error.name = 'InvalidParameterError';
     throw error;
   }
   
-  if (!data) {
-    // #region agent log
-    Logger.log(JSON.stringify({location:'Code.gs:saveOrUpdateStock:dataNull', message:'CRITICAL: Data parameter is null in saveOrUpdateStock', data:{callStack:'check logs above'}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H1'}));
-    // #endregion
-    const error = new Error('data parameter is required');
+  if (!sheet || sheet === null || sheet === undefined) {
+    const error = new Error('sheet parameter is required and cannot be null or undefined');
+    error.name = 'InvalidParameterError';
+    throw error;
+  }
+  
+  if (!data || data === null || data === undefined) {
+    const error = new Error('data parameter is required and cannot be null or undefined');
     error.name = 'InvalidParameterError';
     throw error;
   }
@@ -1157,4 +1160,6 @@ function handleGetUserStocks(data) {
     ).setMimeType(ContentService.MimeType.JSON);
   }
 }
+
+
 
