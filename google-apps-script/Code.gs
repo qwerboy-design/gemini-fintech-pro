@@ -34,6 +34,15 @@
  * 5. 部署為 Web App（部署 -> 新增部署 -> 類型：網頁應用程式）
  * 6. [重要] 執行權限必須設置為：任何人均可存取（才能自動添加 CORS headers）
  * 7. 複製部署 URL 並設置為環境變數 VITE_GAS_URL
+ * 
+ * [測試函式說明]
+ * 
+ * 如果您想測試特定功能，請使用以下測試函式：
+ * - testSheetAccess(): 測試 Sheet 訪問權限
+ * - testSaveOrUpdateStock(): 測試股票保存功能
+ * - initializeUserStocksSheetStandalone(): 初始化 UserStocks 工作表
+ * 
+ * ⚠️ 警告：請勿直接執行內部函式（如 saveOrUpdateStock），這些函式需要參數且應通過對應的處理函式被呼叫。
  */
 
 // ========== 配置 ==========
@@ -784,8 +793,14 @@ function initializeUserStocksSheetStandalone() {
 /**
  * 保存或更新股票記錄
  * 
+ * ⚠️ 警告：此函式不應直接執行！
+ * 
+ * 此函式是一個內部函式，應該只通過 handleSaveStock() 被呼叫。
+ * 如果您想測試此函式，請使用 testSaveOrUpdateStock() 函式。
+ * 
  * @param {Sheet} sheet - Google Sheet 工作表對象
  * @param {Object} data - 包含 userId 和 stock 的數據對象
+ * @private
  */
 function saveOrUpdateStock(sheet, data) {
   // 嚴格參數驗證 - 必須在函數開頭立即檢查
@@ -801,7 +816,12 @@ function saveOrUpdateStock(sheet, data) {
     
     Logger.log('ERROR: saveOrUpdateStock called with ' + arguments.length + ' parameter(s). Stack trace: ' + stackTrace);
     
-    const error = new Error('saveOrUpdateStock requires 2 parameters: sheet and data. Received ' + arguments.length + ' parameter(s). This function should only be called from handleSaveStock().');
+    const error = new Error(
+      'saveOrUpdateStock 需要 2 個參數：sheet 和 data。收到 ' + arguments.length + ' 個參數。\n' +
+      '此函式是內部函式，不應直接執行。\n' +
+      '如果您想測試此函式，請使用 testSaveOrUpdateStock() 函式。\n' +
+      '在生產環境中，此函式應該只通過 handleSaveStock() 被呼叫。'
+    );
     error.name = 'InvalidParameterError';
     throw error;
   }
