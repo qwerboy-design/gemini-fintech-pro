@@ -104,6 +104,11 @@ export async function getDailyMarketReport(): Promise<string> {
     // 提取回應內容
     let content = response.text;
 
+    // 檢查內容是否存在
+    if (!content || typeof content !== 'string') {
+      throw new Error('API 回應格式錯誤：未返回有效文字內容');
+    }
+
     // 確保內容不超過 500 字
     if (content.length > 500) {
       content = content.substring(0, 500) + '...';
