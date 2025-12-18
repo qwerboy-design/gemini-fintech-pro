@@ -1,12 +1,14 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Header } from './components/Header';
 import { MarketSentiment } from './components/MarketSentiment';
 import { StrategyButtons } from './components/StrategyButtons';
 import { StockTable } from './components/StockTable';
 import { LoginModal } from './components/LoginModal';
+import { AIDailyReport } from './components/AIDailyReport';
 import { mockStocks } from './data/mockStocks';
 import { queryStock } from './services/stockService';
 import { saveStockToGAS, deleteStockFromGAS, getUserStocksFromGAS, type StockData } from './services/gasService';
+import { getDailyMarketReport } from './services/geminiService';
 import type { Stock } from './types/stock';
 import './App.css';
 
@@ -162,6 +164,11 @@ function App() {
     }
   });
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+
+  // AI 智能日報狀態
+  const [aiDailyReport, setAiDailyReport] = useState<string | null>(null);
+  const [isLoadingAIReport, setIsLoadingAIReport] = useState(false);
+  const [aiReportError, setAiReportError] = useState<string | null>(null);
 
   // Google Apps Script URL（從環境變數讀取）
   const gasUrl = import.meta.env.VITE_GAS_URL || '';
@@ -757,6 +764,40 @@ function App() {
     };
   }, [currentUser, gasUrl]); // 依賴：用戶狀態、GAS URL
 
+  // 追蹤 AI 報告載入狀態的 ref（避免重複呼叫）
+  const isLoadingAIReportRef = useRef(false);
+
+  // 載入 AI 智能日報
+  const loadAIDailyReport = useCallback(async () => {
+    // 如果正在載入，避免重複呼叫
+    if (isLoadingAIReportRef.current) {
+      return;
+    }
+
+    isLoadingAIReportRef.current = true;
+    setIsLoadingAIReport(true);
+    setAiReportError(null);
+
+    try {
+      const report = await getDailyMarketReport();
+      setAiDailyReport(report);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '載入 AI 報告時發生未知錯誤';
+      setAiReportError(errorMessage);
+      console.error('載入 AI 報告失敗:', error);
+    } finally {
+      setIsLoadingAIReport(false);
+      isLoadingAIReportRef.current = false;
+    }
+  }, []);
+
+  // 監聽 activeTab 變化，切換到 AI 智能日報時觸發載入
+  useEffect(() => {
+    if (activeTab === 'AI 智能日報') {
+      loadAIDailyReport();
+    }
+  }, [activeTab, loadAIDailyReport]); // 依賴 activeTab 和 loadAIDailyReport
+
   return (
     <div className="min-h-screen bg-black text-white">
                   <Header
@@ -782,23 +823,36 @@ function App() {
       />
 
       <main className="container mx-auto px-4 py-6 space-y-6">
-        {/* 市場情緒 */}
-        <MarketSentiment sentiment={marketSentiment} />
+        {/* 根據 activeTab 條件渲染不同內容 */}
+        {activeTab === 'AI 智能日報' ? (
+          /* AI 智能日報 */
+          <AIDailyReport
+            content={aiDailyReport}
+            isLoading={isLoadingAIReport}
+            error={aiReportError}
+            onRetry={loadAIDailyReport}
+          />
+        ) : (
+          <>
+            {/* 市場情緒 */}
+            <MarketSentiment sentiment={marketSentiment} />
 
-        {/* 策略按鈕 */}
-        <StrategyButtons
-          activeStrategy={activeStrategy}
-          onStrategyChange={setActiveStrategy}
-        />
+            {/* 策略按鈕 */}
+            <StrategyButtons
+              activeStrategy={activeStrategy}
+              onStrategyChange={setActiveStrategy}
+            />
 
-        {/* 股票表格 */}
-        <StockTable
-          stocks={filteredAndSortedStocks}
-          onToggleFavorite={toggleFavorite}
-          onDeleteStock={handleDeleteStock}
-          sortType={sortType}
-          onSortChange={setSortType}
-        />
+            {/* 股票表格 */}
+            <StockTable
+              stocks={filteredAndSortedStocks}
+              onToggleFavorite={toggleFavorite}
+              onDeleteStock={handleDeleteStock}
+              sortType={sortType}
+              onSortChange={setSortType}
+            />
+          </>
+        )}
       </main>
     </div>
   );

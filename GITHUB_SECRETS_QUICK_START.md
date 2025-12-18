@@ -17,7 +17,11 @@ https://github.com/qwerboy-design/gemini-fintech-pro/settings/secrets/actions
 
 ---
 
-### 步驟 2: 添加 Secret
+### 步驟 2: 添加 Secrets
+
+需要添加兩個 Secrets：
+
+#### Secret 1: VITE_GAS_URL
 
 1. **點擊「New repository secret」按鈕**
 
@@ -25,6 +29,18 @@ https://github.com/qwerboy-design/gemini-fintech-pro/settings/secrets/actions
    ```
    Name:  VITE_GAS_URL
    Secret: https://script.google.com/macros/s/AKfycbzoEKE_10KGmlx8DfLgPa1SohOUYhrxuwmCHJRMogTkarwBL9NBAjBmP23JgRVE_GUk/exec
+   ```
+
+3. **點擊「Add secret」**
+
+#### Secret 2: VITE_GEMINI_API_KEY
+
+1. **再次點擊「New repository secret」按鈕**
+
+2. **填寫表單**：
+   ```
+   Name:  VITE_GEMINI_API_KEY
+   Secret: [您的 Gemini API Key，從 .env 文件中複製]
    ```
 
 3. **點擊「Add secret」**
@@ -64,22 +80,36 @@ git push origin main
 
 ## 📋 Secret 資訊
 
-| 項目 | 值 |
-|------|-----|
-| **名稱** | `VITE_GAS_URL` |
-| **值** | `https://script.google.com/macros/s/AKfycbzoEKE_10KGmlx8DfLgPa1SohOUYhrxuwmCHJRMogTkarwBL9NBAjBmP23JgRVE_GUk/exec` |
+| 項目 | 名稱 | 說明 |
+|------|------|------|
+| **Google Apps Script URL** | `VITE_GAS_URL` | Google Apps Script Web App 部署 URL |
+| **Gemini API Key** | `VITE_GEMINI_API_KEY` | Google Gemini AI API 金鑰（用於 AI 智能日報功能） |
+
+### Secret 值範例
+
+```
+VITE_GAS_URL: https://script.google.com/macros/s/AKfycbzoEKE_10KGmlx8DfLgPa1SohOUYhrxuwmCHJRMogTkarwBL9NBAjBmP23JgRVE_GUk/exec
+VITE_GEMINI_API_KEY: [從您的 .env 文件中複製]
+```
 
 ---
 
 ## ⚠️ 重要提醒
 
-1. ✅ Secret 名稱必須完全匹配：`VITE_GAS_URL`（區分大小寫）
-2. ✅ URL 值不要有空格或換行
+1. ✅ Secret 名稱必須完全匹配（區分大小寫）：
+   - `VITE_GAS_URL`
+   - `VITE_GEMINI_API_KEY`
+2. ✅ 值不要有空格或換行
 3. ✅ 設置後需要觸發重新部署才能生效
 4. ✅ Secret 設置後不會顯示實際值（安全原因）
+5. ✅ 兩個 Secrets 都需要設置才能完整使用所有功能
 
 ---
 
 **詳細說明**: 請參考 `GITHUB_SECRETS_SETUP.md`
 
 **最後更新**: 2025-12-16
+
+
+
+
