@@ -511,12 +511,17 @@ function handleSaveStock(data) {
     try {
       // 最終驗證參數有效性（在呼叫前最後一次檢查）
       if (!sheetToSave || !dataToSave) {
+        Logger.log('ERROR: sheetToSave or dataToSave is null before calling saveOrUpdateStock');
         throw new Error('參數驗證失敗：sheetToSave 或 dataToSave 為空');
       }
       
       if (!dataToSave.userId || !dataToSave.stock || !dataToSave.stock.symbol) {
+        Logger.log('ERROR: dataToSave structure is invalid before calling saveOrUpdateStock');
         throw new Error('參數驗證失敗：dataToSave 結構不完整');
       }
+      
+      // 記錄呼叫前的參數狀態
+      Logger.log('Calling saveOrUpdateStock with sheet: ' + (sheetToSave ? sheetToSave.getName() : 'null') + ', data.userId: ' + (dataToSave ? dataToSave.userId : 'null'));
       
       // 明確傳遞參數，確保參數順序正確
       result = saveOrUpdateStock(sheetToSave, dataToSave);
@@ -786,7 +791,17 @@ function saveOrUpdateStock(sheet, data) {
   // 嚴格參數驗證 - 必須在函數開頭立即檢查
   // 檢查 arguments 對象以確保參數被正確傳遞
   if (arguments.length < 2) {
-    const error = new Error('saveOrUpdateStock requires 2 parameters: sheet and data. Received ' + arguments.length + ' parameter(s)');
+    // 記錄呼叫堆疊以便追蹤問題
+    let stackTrace = '';
+    try {
+      throw new Error();
+    } catch (e) {
+      stackTrace = e.stack || '無法獲取堆疊資訊';
+    }
+    
+    Logger.log('ERROR: saveOrUpdateStock called with ' + arguments.length + ' parameter(s). Stack trace: ' + stackTrace);
+    
+    const error = new Error('saveOrUpdateStock requires 2 parameters: sheet and data. Received ' + arguments.length + ' parameter(s). This function should only be called from handleSaveStock().');
     error.name = 'InvalidParameterError';
     throw error;
   }
