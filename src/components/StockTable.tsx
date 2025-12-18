@@ -234,7 +234,7 @@ export function StockTable({
 
       {/* 表格內容 */}
       <div className="divide-y divide-gray-800">
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="popLayout">
           {stocks.length === 0 ? (
             <motion.div
               key="empty"
@@ -391,4 +391,7 @@ export function StockTable({
     </div>
   );
 }
+
+
+
 
