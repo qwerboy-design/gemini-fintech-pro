@@ -81,14 +81,31 @@ export async function getDailyMarketReport(): Promise<string> {
     // 初始化 Gemini API 客戶端
     const genAI = new GoogleGenAI({ apiKey });
 
-    // 構建提示詞
-    const prompt = `請提供今日台灣股市的重要資訊和分析，包括：
+    // 獲取今天的日期（用於提示詞）
+    const today = new Date();
+    const todayString = today.toLocaleDateString('zh-TW', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    // 構建提示詞（包含今天的日期）
+    const prompt = `請提供今日(${todayString})台灣股市的重要資訊和分析，包括：
 1. 市場整體表現
 2. 重要個股動態
 3. 產業趨勢
 4. 投資建議
 
 請以簡潔明瞭的方式呈現，總字數控制在 500 字以內。`;
+
+    // 配置 Google Search 工具（用於獲取即時資訊）
+    const config = {
+      tools: [
+        {
+          googleSearch: {},
+        },
+      ],
+    };
 
     // 呼叫 API（設置超時）
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -98,6 +115,7 @@ export async function getDailyMarketReport(): Promise<string> {
     const apiPromise = genAI.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
+      config,
     });
     const response = await Promise.race([apiPromise, timeoutPromise]);
 
