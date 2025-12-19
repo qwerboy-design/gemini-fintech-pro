@@ -314,10 +314,6 @@ export async function getUserStocksFromGAS(
       });
     }
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:317',message:'getUserStocksFromGAS response status',data:{ok:response.ok,status:response.status,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-    // #endregion
-
     if (!response.ok) {
       const errorText = await response.text();
       let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
@@ -329,31 +325,15 @@ export async function getUserStocksFromGAS(
         errorMessage = errorText || errorMessage;
       }
 
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:328',message:'getUserStocksFromGAS HTTP error',data:{status:response.status,errorMessage:errorMessage},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
-
       throw new Error(errorMessage);
     }
 
     const responseText = await response.text();
     
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:335',message:'getUserStocksFromGAS response text',data:{responseText:responseText.substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-    // #endregion
-    
     let result: GetUserStocksResponse;
     try {
       result = JSON.parse(responseText) as GetUserStocksResponse;
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:343',message:'getUserStocksFromGAS parsed result',data:{success:result.success,message:result.message,hasData:!!result.data,stocksCount:result.data?.stocks?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
     } catch (parseError) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:348',message:'getUserStocksFromGAS parse error',data:{error:String(parseError),responseText:responseText.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
-      
       throw new Error('無法解析伺服器響應: ' + String(parseError));
     }
     
@@ -382,6 +362,7 @@ export async function testGASConnection(url: string): Promise<boolean> {
     return false;
   }
 }
+
 
 
 

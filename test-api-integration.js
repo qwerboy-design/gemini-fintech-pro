@@ -165,3 +165,4 @@ console.log('   4. 觀察控制台日誌確認 API 調用是否成功');
 console.log('   5. 檢查 Fear and Greed Index 是否自動更新');
 console.log('\n');
 
+
