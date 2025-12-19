@@ -117,3 +117,4 @@ export async function getFearGreedIndex(): Promise<MarketSentiment | null> {
 
 
 
+

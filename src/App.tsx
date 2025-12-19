@@ -610,6 +610,10 @@ function App() {
   // 過濾和排序股票
   const filteredAndSortedStocks = useMemo(() => {
     try {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:611',message:'filteredAndSortedStocks start',data:{mockStocksCount:mockStocks.length,userStocksFromDBCount:userStocksFromDB.length,queriedStocksCount:queriedStocks.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
       // 合併本地股票、資料庫股票和查詢到的股票
       // 使用 Map 確保每個股票代號只出現一次（以最後一個為準）
       const stocksMap = new Map<string, Stock>();
@@ -619,15 +623,33 @@ function App() {
         stocksMap.set(stock.symbol, stock);
       });
       
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:620',message:'After adding mockStocks',data:{stocksMapSize:stocksMap.size},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
       // 2. 用資料庫股票覆蓋或添加（資料庫數據優先）
       if (userStocksFromDB.length > 0) {
+        // #region agent log
+        const duplicateSymbols = userStocksFromDB.filter((stock, index, arr) => arr.findIndex(s => s.symbol === stock.symbol) !== index).map(s => s.symbol);
+        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:625',message:'Before adding userStocksFromDB',data:{userStocksFromDBCount:userStocksFromDB.length,duplicateSymbols:duplicateSymbols},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        
         userStocksFromDB.forEach((dbStock: Stock) => {
           stocksMap.set(dbStock.symbol, dbStock);
         });
       }
       
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:630',message:'After adding userStocksFromDB',data:{stocksMapSize:stocksMap.size},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      
       // 3. 添加查詢到的股票（如果不存在）
       if (queriedStocks.length > 0) {
+        // #region agent log
+        const duplicateQueried = queriedStocks.filter((stock, index, arr) => arr.findIndex(s => s.symbol === stock.symbol) !== index).map(s => s.symbol);
+        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:633',message:'Before adding queriedStocks',data:{queriedStocksCount:queriedStocks.length,duplicateQueried:duplicateQueried},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+        
         queriedStocks.forEach((queriedStock) => {
           if (!stocksMap.has(queriedStock.symbol)) {
             stocksMap.set(queriedStock.symbol, queriedStock);
@@ -637,6 +659,10 @@ function App() {
       
       // 轉換 Map 為陣列
       let stocks = Array.from(stocksMap.values());
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:640',message:'After Map to array conversion',data:{stocksCount:stocks.length,stocksSymbols:stocks.map(s => s.symbol)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
 
     // 過濾掉隱藏的股票
     stocks = stocks.filter((stock) => !hiddenStocks.has(stock.symbol));
@@ -775,6 +801,21 @@ function App() {
         rank: index + 1,
       }));
     }
+
+    // 最終去重：確保沒有重複的股票代碼（以防萬一）
+    const finalStocksMap = new Map<string, Stock>();
+    stocks.forEach((stock) => {
+      // 如果已存在，保留第一個（保持穩定性）
+      if (!finalStocksMap.has(stock.symbol)) {
+        finalStocksMap.set(stock.symbol, stock);
+      }
+    });
+    stocks = Array.from(finalStocksMap.values());
+    
+    // #region agent log
+    const duplicateSymbolsFinal = stocks.filter((stock, index, arr) => arr.findIndex(s => s.symbol === stock.symbol) !== index).map(s => s.symbol);
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:775',message:'Final deduplication result',data:{finalStocksCount:stocks.length,duplicateSymbolsFinal:duplicateSymbolsFinal,allSymbols:stocks.map(s => s.symbol)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
 
       return stocks;
     } catch (error) {

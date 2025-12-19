@@ -166,3 +166,4 @@ console.log('   5. 檢查 Fear and Greed Index 是否自動更新');
 console.log('\n');
 
 
+
