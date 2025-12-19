@@ -7,7 +7,7 @@ import type { Stock } from '../types/stock';
  */
 
 /**
- * FinMind API 響應格式（taiwan_stock_tick_snapshot）
+ * FinMind API 響應格式（TaiwanStockPrice）
  */
 interface FinMindQuoteResponse {
   msg: string;
@@ -50,7 +50,7 @@ export async function getStockQuote(symbol: string): Promise<Stock | null> {
   }
 
   try {
-    const url = new URL('https://api.finmindtrade.com/api/v4/taiwan_stock_tick_snapshot');
+    const url = new URL('https://api.finmindtrade.com/api/v4/TaiwanStockPrice');
     url.searchParams.set('data_id', symbol);
 
     const response = await fetch(url.toString(), {
