@@ -127,8 +127,9 @@ function App() {
     loadFavoritesFromStorage()
   );
 
-  // 收藏股票即時價格（從 FinMind API 獲取）
-  const [favoriteStocksPrices, setFavoriteStocksPrices] = useState<Map<string, Stock>>(new Map());
+  // 所有股票的即時價格（從 FinMind API 獲取）
+  // 注意：此 Map 存儲所有已獲取價格的股票，不僅限於收藏股票
+  const [allStocksPrices, setAllStocksPrices] = useState<Map<string, Stock>>(new Map());
   const [isLoadingFavoritePrices, setIsLoadingFavoritePrices] = useState(false);
 
   // 隱藏的股票列表（從 localStorage 載入）
@@ -355,42 +356,62 @@ function App() {
     }
   };
 
-  // 更新收藏股票即時價格（使用 FinMind API）
+  // 更新股票即時價格（使用 FinMind API）
+  // 此函數會更新所有顯示的股票價格，不僅限於收藏股票
   const updateFavoriteStocksPrices = useCallback(async () => {
-    // 獲取收藏股票代碼列表
-    // 如果用戶已登入且有資料庫股票，優先使用資料庫中的收藏股票
-    // 否則使用本地收藏列表
-    let favoriteSymbols: string[] = [];
+    // 獲取需要更新價格的股票代碼列表
+    // 1. 優先更新收藏股票
+    // 2. 同時更新當前顯示的所有股票（以便在非收藏策略下也能看到最新價格）
+    let symbolsToUpdate: string[] = [];
     
+    // 收集收藏股票的代碼
     if (currentUser && userStocksFromDB.length > 0) {
       // 從資料庫股票中獲取收藏的股票
-      favoriteSymbols = userStocksFromDB
+      const favoriteSymbols = userStocksFromDB
         .filter(stock => favorites.has(stock.symbol))
         .map(stock => stock.symbol);
+      symbolsToUpdate.push(...favoriteSymbols);
     } else {
       // 使用本地收藏列表（從 favorites Set 中獲取）
-      favoriteSymbols = Array.from(favorites);
+      symbolsToUpdate.push(...Array.from(favorites));
     }
+    
+    // 收集當前顯示的所有股票代碼（從 mockStocks、userStocksFromDB、queriedStocks）
+    const allDisplayedSymbols = new Set<string>();
+    mockStocks.forEach(stock => allDisplayedSymbols.add(stock.symbol));
+    userStocksFromDB.forEach(stock => allDisplayedSymbols.add(stock.symbol));
+    queriedStocks.forEach(stock => allDisplayedSymbols.add(stock.symbol));
+    
+    // 將所有顯示的股票代碼加入更新列表（去重）
+    symbolsToUpdate.push(...Array.from(allDisplayedSymbols));
+    symbolsToUpdate = Array.from(new Set(symbolsToUpdate)); // 去重
 
-    if (favoriteSymbols.length === 0) {
+    if (symbolsToUpdate.length === 0) {
       return;
     }
 
     setIsLoadingFavoritePrices(true);
 
     try {
-      const prices = await getStockQuotes(favoriteSymbols);
-      setFavoriteStocksPrices(prices);
+      const prices = await getStockQuotes(symbolsToUpdate);
+      // 更新所有股票的價格（合併到現有的價格 Map 中）
+      setAllStocksPrices((prev) => {
+        const updated = new Map(prev);
+        prices.forEach((stock, symbol) => {
+          updated.set(symbol, stock);
+        });
+        return updated;
+      });
       
       if (import.meta.env.DEV) {
-        console.log(`成功更新 ${prices.size} 筆收藏股票價格`);
+        console.log(`成功更新 ${prices.size} 筆股票價格（共 ${symbolsToUpdate.length} 筆請求）`);
       }
     } catch (error) {
-      console.error('更新收藏股票價格失敗:', error);
+      console.error('更新股票價格失敗:', error);
     } finally {
       setIsLoadingFavoritePrices(false);
     }
-  }, [currentUser, userStocksFromDB, favorites]);
+  }, [currentUser, userStocksFromDB, favorites, queriedStocks]);
 
   // 更新 Fear and Greed Index（使用 Finnhub API）
   const updateFearGreedIndex = useCallback(async () => {
@@ -664,7 +685,7 @@ function App() {
         
         // 使用即時價格更新股票數據
         stocks = stocks.map((stock) => {
-          const realTimePrice = favoriteStocksPrices.get(stock.symbol);
+          const realTimePrice = allStocksPrices.get(stock.symbol);
           if (realTimePrice) {
             return {
               ...stock,
@@ -692,7 +713,35 @@ function App() {
               return true;
           }
         });
+        
+        // 對於非收藏策略，也使用 API 獲取的價格更新股票數據
+        stocks = stocks.map((stock) => {
+          const realTimePrice = allStocksPrices.get(stock.symbol);
+          if (realTimePrice) {
+            return {
+              ...stock,
+              price: realTimePrice.price,
+              change: realTimePrice.change,
+              volume: realTimePrice.volume ?? stock.volume,
+            };
+          }
+          return stock;
+        });
       }
+    } else {
+      // 當策略為 'all' 時，也使用 API 獲取的價格更新所有股票
+      stocks = stocks.map((stock) => {
+        const realTimePrice = allStocksPrices.get(stock.symbol);
+        if (realTimePrice) {
+          return {
+            ...stock,
+            price: realTimePrice.price,
+            change: realTimePrice.change,
+            volume: realTimePrice.volume ?? stock.volume,
+          };
+        }
+        return stock;
+      });
     }
 
     // 排序
@@ -733,7 +782,7 @@ function App() {
       // 返回空陣列而不是崩潰，讓 UI 顯示「沒有符合條件的股票」
       return [];
     }
-  }, [activeStrategy, favorites, sortType, searchQuery, queriedStocks, hiddenStocks, userStocksFromDB, favoriteStocksPrices, currentUser]);
+  }, [activeStrategy, favorites, sortType, searchQuery, queriedStocks, hiddenStocks, userStocksFromDB, allStocksPrices, currentUser]);
 
   // 追蹤已從資料庫載入的股票代號（避免重複儲存）
   const loadedStockSymbolsRef = useRef<Set<string>>(new Set());
