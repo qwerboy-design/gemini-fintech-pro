@@ -115,66 +115,20 @@ export async function getStockQuotes(symbols: string[]): Promise<Map<string, Sto
     return new Map();
   }
 
-  try {
-    // 嘗試使用批量查詢（FinMind 支持 data_id 陣列）
-    const url = new URL('https://api.finmindtrade.com/api/v4/taiwan_stock_tick_snapshot');
-    // 將陣列轉換為逗號分隔的字串，或使用 JSON 格式
-    url.searchParams.set('data_id', uniqueSymbols.join(','));
-
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Accept': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      // 如果批量查詢失敗，嘗試並行單一查詢
-      if (response.status === 400 || response.status === 404) {
-        return await getStockQuotesParallel(uniqueSymbols);
-      }
-      
-      if (response.status === 401 || response.status === 403) {
-        console.warn('FinMind API 權限錯誤: 可能需要贊助會員才能使用即時資訊功能');
-        return new Map();
-      }
-      
-      if (response.status === 429) {
-        console.warn('FinMind API 速率限制，請稍後再試');
-        return new Map();
-      }
-
-      console.warn(`FinMind API 批量請求失敗: ${response.status} ${response.statusText}`);
-      return await getStockQuotesParallel(uniqueSymbols);
-    }
-
-    const data = (await response.json()) as FinMindQuoteResponse;
-
-    if (data.status !== 200 || !data.data || data.data.length === 0) {
-      console.warn(`FinMind API 批量查詢返回錯誤: ${data.msg || '未知錯誤'}`);
-      return await getStockQuotesParallel(uniqueSymbols);
-    }
-
-    // 轉換為 Map
+  // 由於 FinMind API 的批量查詢在 CORS 預檢階段可能失敗（OPTIONS 返回 400），
+  // 我們直接使用並行單一查詢，這樣更可靠且不會觸發 CORS 預檢問題
+  // 如果只有一個股票，直接使用單一查詢
+  if (uniqueSymbols.length === 1) {
+    const stock = await getStockQuote(uniqueSymbols[0]);
     const result = new Map<string, Stock>();
-    
-    for (const quote of data.data) {
-      result.set(quote.stock_id, {
-        symbol: quote.stock_id,
-        name: quote.stock_id,
-        price: quote.deal_price || quote.close || 0,
-        change: quote.change_percent || ((quote.deal_price - quote.close) / quote.close) * 100 || 0,
-        volume: quote.volume || 0,
-      });
+    if (stock) {
+      result.set(stock.symbol, stock);
     }
-
     return result;
-  } catch (error) {
-    console.error('批量獲取股票報價失敗:', error);
-    // 嘗試並行單一查詢作為 fallback
-    return await getStockQuotesParallel(uniqueSymbols);
   }
+
+  // 多個股票時，使用並行單一查詢
+  return await getStockQuotesParallel(uniqueSymbols);
 }
 
 /**
