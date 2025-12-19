@@ -27,6 +27,15 @@ interface FinMindQuoteResponse {
 }
 
 /**
+ * FinMind API 使用資訊響應格式
+ */
+export interface FinMindUsageInfo {
+  user_count: number; // 使用次數
+  api_request_limit: number; // API 使用上限
+  [key: string]: unknown;
+}
+
+/**
  * 獲取單一台股即時報價
  * 
  * @param symbol 股票代碼（如 '2330'）
@@ -151,6 +160,64 @@ async function getStockQuotesParallel(symbols: string[]): Promise<Map<string, St
   });
 
   return resultMap;
+}
+
+/**
+ * 獲取 FinMind API 使用次數資訊
+ * 
+ * 使用 token 查詢當前 API 使用次數和使用上限
+ * 
+ * @returns API 使用資訊，包含使用次數和上限，如果失敗則返回 null
+ */
+export async function getFinMindUsageInfo(): Promise<FinMindUsageInfo | null> {
+  const apiKey = import.meta.env.VITE_FINMIND_API_KEY;
+  
+  if (!apiKey) {
+    console.warn('FinMind API Key 未配置');
+    return null;
+  }
+
+  try {
+    const url = 'https://api.web.finmindtrade.com/v2/user_info';
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      // 處理權限錯誤
+      if (response.status === 401 || response.status === 403) {
+        console.warn('FinMind API 權限錯誤: 無法查詢使用資訊');
+        return null;
+      }
+      
+      // 處理速率限制
+      if (response.status === 429) {
+        console.warn('FinMind API 速率限制，請稍後再試');
+        return null;
+      }
+
+      console.warn(`FinMind API 使用資訊請求失敗: ${response.status} ${response.statusText}`);
+      return null;
+    }
+
+    const data = await response.json() as FinMindUsageInfo;
+
+    // 驗證返回數據格式
+    if (typeof data.user_count !== 'number' || typeof data.api_request_limit !== 'number') {
+      console.warn('FinMind API 返回的數據格式不正確');
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('獲取 FinMind API 使用資訊失敗:', error);
+    return null;
+  }
 }
 
 
