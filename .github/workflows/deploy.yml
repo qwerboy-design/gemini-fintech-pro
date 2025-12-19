@@ -36,8 +36,8 @@ jobs:
         env:
           # 環境變數從 GitHub Secrets 讀取（如果已設置）
           # 需要在 GitHub 倉庫 Settings → Secrets and variables → Actions 中添加
+          # 注意：VITE_GEMINI_API_KEY 已移除，API Key 現在存儲在 Google Apps Script 的 Script Properties 中
           VITE_GAS_URL: ${{ secrets.VITE_GAS_URL || '' }}
-          VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY || '' }}
           VITE_FINMIND_API_KEY: ${{ secrets.VITE_FINMIND_API_KEY || '' }}
           VITE_FINNHUB_API_KEY: ${{ secrets.VITE_FINNHUB_API_KEY || '' }}
 

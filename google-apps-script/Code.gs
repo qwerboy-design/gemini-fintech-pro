@@ -148,6 +148,8 @@ function doPost(e) {
       result = handleDeleteStock(requestData);
     } else if (requestData.action === 'getUserStocks') {
       result = handleGetUserStocks(requestData);
+    } else if (requestData.action === 'getGeminiReport') {
+      result = handleGeminiReport(requestData);
     } else {
       // #region agent log
       Logger.log(JSON.stringify({location:'Code.gs:doPost:unknownAction', message:'Unknown action', data:{action:requestData.action}, timestamp:Date.now(), sessionId:'debug-session', runId:'run2', hypothesisId:'H4'}));
@@ -1246,6 +1248,159 @@ function testSaveOrUpdateStock() {
     Logger.log('測試失敗: ' + error.toString());
     Logger.log('錯誤堆疊: ' + (error.stack || '無堆疊資訊'));
     throw error;
+  }
+}
+
+/**
+ * 處理 Gemini API 報告請求
+ * API Key 存儲在 Script Properties 中，永遠不會暴露給客戶端
+ * 
+ * 設置步驟：
+ * 1. 前往 Google Apps Script 編輯器
+ * 2. 點擊「專案設定」（齒輪圖標）
+ * 3. 找到「指令碼內容」區塊
+ * 4. 點擊「新增指令碼內容」
+ * 5. 添加：屬性鍵: GEMINI_API_KEY，屬性值: 您的 Gemini API Key
+ * 6. 點擊「儲存指令碼內容」
+ */
+function handleGeminiReport(requestData) {
+  try {
+    // 從 Script Properties 獲取 API Key（安全存儲）
+    const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+    
+    if (!apiKey) {
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: false,
+          message: 'Gemini API Key 未配置。請在 Script Properties 中設置 GEMINI_API_KEY'
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // 獲取今天的日期（用於提示詞）
+    const today = new Date();
+    const todayString = Utilities.formatDate(today, Session.getScriptTimeZone(), 'yyyy年M月d日');
+    
+    // 構建提示詞
+    const prompt = '請提供今日(' + todayString + ')台灣股市的重要資訊和分析，包括：\n' +
+      '1. 市場整體表現\n' +
+      '2. 重要個股動態\n' +
+      '3. 產業趨勢\n' +
+      '4. 投資建議\n\n' +
+      '**重要**：請使用 Google Search 獲取最新的市場資訊和數據，確保資訊的準確性和時效性。\n' +
+      '請以簡潔明瞭的方式呈現，總字數控制在 500 字以內。';
+    
+    // 調用 Gemini API
+    const apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=' + apiKey;
+    
+    const payload = {
+      contents: [{
+        parts: [{
+          text: prompt
+        }]
+      }],
+      tools: [{
+        googleSearch: {}
+      }]
+    };
+    
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+    
+    const response = UrlFetchApp.fetch(apiUrl, options);
+    const responseCode = response.getResponseCode();
+    const responseText = response.getContentText();
+    
+    if (responseCode !== 200) {
+      Logger.log('Gemini API 錯誤: ' + responseCode + ' - ' + responseText);
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: false,
+          message: 'Gemini API 調用失敗: ' + responseCode
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    const responseData = JSON.parse(responseText);
+    
+    // 提取內容
+    let content = '';
+    if (responseData.candidates && responseData.candidates.length > 0) {
+      const candidate = responseData.candidates[0];
+      if (candidate.content && candidate.content.parts) {
+        content = candidate.content.parts.map(function(part) {
+          return part.text || '';
+        }).join('');
+      }
+    }
+    
+    if (!content) {
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          success: false,
+          message: 'API 回應格式錯誤：未返回有效文字內容'
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // 處理 grounding metadata（引用來源）
+    if (responseData.groundingMetadata && responseData.groundingMetadata.groundingChunks) {
+      const sources = [];
+      responseData.groundingMetadata.groundingChunks.forEach(function(chunk) {
+        if (chunk.web && chunk.web.uri) {
+          sources.push({
+            uri: chunk.web.uri,
+            title: chunk.web.title || ''
+          });
+        }
+      });
+      
+      // 去重並限制數量
+      const uniqueSources = [];
+      const seenUris = {};
+      for (var i = 0; i < sources.length && uniqueSources.length < 3; i++) {
+        if (!seenUris[sources[i].uri]) {
+          seenUris[sources[i].uri] = true;
+          uniqueSources.push(sources[i]);
+        }
+      }
+      
+      if (uniqueSources.length > 0) {
+        content += '\n\n📚 資料來源（Grounding Metadata）：';
+        uniqueSources.forEach(function(source, index) {
+          if (source.title) {
+            content += '\n' + (index + 1) + '. ' + source.title + '\n   ' + source.uri;
+          } else {
+            content += '\n' + (index + 1) + '. ' + source.uri;
+          }
+        });
+      }
+    }
+    
+    // 確保內容不超過 500 字
+    if (content.length > 500) {
+      content = content.substring(0, 500) + '...';
+    }
+    
+    return ContentService.createTextOutput(
+      JSON.stringify({
+        success: true,
+        content: content
+      })
+    ).setMimeType(ContentService.MimeType.JSON);
+    
+  } catch (error) {
+    Logger.log('handleGeminiReport 錯誤: ' + error.toString());
+    return ContentService.createTextOutput(
+      JSON.stringify({
+        success: false,
+        message: '獲取 AI 報告失敗: ' + error.toString()
+      })
+    ).setMimeType(ContentService.MimeType.JSON);
   }
 }
 

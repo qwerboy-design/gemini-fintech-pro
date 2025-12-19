@@ -501,9 +501,9 @@ npm run dev
 # 從 Google Apps Script 部署後獲取的 URL
 VITE_GAS_URL=https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec
 
-# Google Gemini AI API Key（必需，用於 AI 智能日報功能）
-# 獲取方式：前往 https://aistudio.google.com/app/apikey 創建 API Key
-VITE_GEMINI_API_KEY=your_gemini_api_key_here
+# Google Gemini AI API Key（已移至 Google Apps Script Script Properties）
+# 不再需要在此設置，請在 Google Apps Script 的 Script Properties 中設置 GEMINI_API_KEY
+# 詳細說明請參考：GEMINI_API_SECURITY_FIX.md
 
 # FinMind API Key（可選，用於台股即時報價功能）
 # 獲取方式：前往 https://finmindtrade.com/ 註冊並獲取 API Key
