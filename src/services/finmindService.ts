@@ -7,21 +7,24 @@ import type { Stock } from '../types/stock';
  */
 
 /**
- * FinMind API 響應格式（TaiwanStockPrice）
+ * FinMind API 響應格式（TaiwanStockPrice - 日線資料）
+ * 注意：此端點不需要贊助會員，但提供的是日線資料而非即時報價
  */
 interface FinMindQuoteResponse {
   msg: string;
   status: number;
   data: Array<{
     stock_id: string;
-    deal_price: number;
-    change: number;
-    change_percent: number;
-    volume: number;
-    high: number;
-    low: number;
-    open: number;
-    close: number;
+    date: string; // 日期
+    close: number; // 收盤價
+    open: number; // 開盤價
+    high: number; // 最高價
+    low: number; // 最低價
+    volume: number; // 成交量
+    Trading_Volume?: number; // 交易量（備用）
+    Trading_money?: number; // 交易金額
+    spread?: number; // 價差
+    Trading_turnover?: number; // 成交筆數
     [key: string]: unknown;
   }>;
 }
@@ -50,13 +53,20 @@ export async function getStockQuote(symbol: string): Promise<Stock | null> {
   }
 
   try {
-    const url = new URL('https://api.finmindtrade.com/api/v4/TaiwanStockPrice');
+    // 使用 TaiwanStockPrice 端點（日線資料，不需要贊助會員）
+    // 端點：/api/v4/data，參數：dataset=TaiwanStockPrice, data_id=股票代碼, start_date=日期
+    const url = new URL('https://api.finmindtrade.com/api/v4/data');
+    const today = new Date().toISOString().split('T')[0]; // 格式：YYYY-MM-DD
+    
+    url.searchParams.set('dataset', 'TaiwanStockPrice');
     url.searchParams.set('data_id', symbol);
+    url.searchParams.set('start_date', today);
+    url.searchParams.set('end_date', today);
+    url.searchParams.set('token', apiKey); // token 作為查詢參數（可選，但建議提供以提高請求上限）
 
     const response = await fetch(url.toString(), {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
         'Accept': 'application/json',
       },
     });
@@ -86,15 +96,31 @@ export async function getStockQuote(symbol: string): Promise<Stock | null> {
       return null;
     }
 
-    const quote = data.data[0];
+    // 獲取最新的資料（通常是陣列中的最後一筆，因為按日期排序）
+    const quotes = data.data;
+    if (quotes.length === 0) {
+      console.warn(`FinMind API 未返回 ${symbol} 的資料`);
+      return null;
+    }
+    
+    // 取最後一筆（最新的資料）
+    const quote = quotes[quotes.length - 1];
 
     // 轉換為 Stock 格式
+    // TaiwanStockPrice 返回的字段：close（收盤價）、open（開盤價）、volume（成交量）
+    const price = typeof quote.close === 'number' ? quote.close : 0;
+    const open = typeof quote.open === 'number' ? quote.open : 0;
+    const volume = typeof quote.volume === 'number' ? quote.volume : (typeof quote.Trading_Volume === 'number' ? quote.Trading_Volume : 0);
+    
+    // 計算漲跌幅：((收盤價 - 開盤價) / 開盤價) * 100
+    const change = open > 0 ? ((price - open) / open) * 100 : 0;
+    
     return {
       symbol: quote.stock_id,
       name: quote.stock_id, // FinMind 可能不包含名稱，使用代碼作為 fallback
-      price: quote.deal_price || quote.close || 0,
-      change: quote.change_percent || ((quote.deal_price - quote.close) / quote.close) * 100 || 0,
-      volume: quote.volume || 0,
+      price: price, // 使用 close 作為價格
+      change: change, // 計算漲跌幅（百分比）
+      volume: volume, // 成交量
       // 其他欄位保持 undefined，由調用方補充
     };
   } catch (error) {
