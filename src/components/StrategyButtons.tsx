@@ -1,7 +1,7 @@
-import { Rocket, Coins, AlertTriangle } from 'lucide-react';
+import { Rocket, Coins, AlertTriangle, Heart } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-export type StrategyType = 'all' | 'bullish' | 'institutional' | 'shortsqueeze';
+export type StrategyType = 'all' | 'bullish' | 'institutional' | 'shortsqueeze' | 'favorites';
 
 interface Strategy {
   id: StrategyType;
@@ -42,6 +42,11 @@ export function StrategyButtons({
       name: '軋空警訊',
       icon: <AlertTriangle size={18} className="text-yellow-500" />,
     },
+    {
+      id: 'favorites',
+      name: '我的收藏',
+      icon: <Heart size={18} className="text-red-500" />,
+    },
   ];
 
   return (
@@ -81,3 +86,8 @@ export function StrategyButtons({
     </div>
   );
 }
+
+
+
+
+

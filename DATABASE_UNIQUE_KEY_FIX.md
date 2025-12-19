@@ -164,3 +164,7 @@ const createdAt = existingCreatedAt || now;
 
 **最後更新**: 2025-12-16  
 **修改檔案**: `google-apps-script/Code.gs` (函數: `saveOrUpdateStock`)
+
+
+
+

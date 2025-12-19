@@ -77,3 +77,8 @@ export const mockStocks: Stock[] = [
     buySellRatio: 75,
   },
 ];
+
+
+
+
+

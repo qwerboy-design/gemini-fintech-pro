@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Header } from './components/Header';
-import { MarketSentiment } from './components/MarketSentiment';
+import { MarketSentiment as MarketSentimentComponent } from './components/MarketSentiment';
 import { StrategyButtons } from './components/StrategyButtons';
 import { StockTable } from './components/StockTable';
 import { LoginModal } from './components/LoginModal';
@@ -9,11 +9,13 @@ import { mockStocks } from './data/mockStocks';
 import { queryStock } from './services/stockService';
 import { saveStockToGAS, deleteStockFromGAS, getUserStocksFromGAS, type StockData } from './services/gasService';
 import { getDailyMarketReport } from './services/geminiService';
-import type { Stock } from './types/stock';
+import { getStockQuotes } from './services/finmindService';
+import { getFearGreedIndex } from './services/finnhubService';
+import type { Stock, MarketSentiment } from './types/stock';
 import './App.css';
 
 type TabType = '金額排行' | 'AI 智能日報' | '國際盤';
-type StrategyType = 'all' | 'bullish' | 'institutional' | 'shortsqueeze';
+type StrategyType = 'all' | 'bullish' | 'institutional' | 'shortsqueeze' | 'favorites';
 type SortType =
   | 'default'
   | 'name-asc'
@@ -124,6 +126,10 @@ function App() {
   const [favorites, setFavorites] = useState<Set<string>>(() =>
     loadFavoritesFromStorage()
   );
+
+  // 收藏股票即時價格（從 FinMind API 獲取）
+  const [favoriteStocksPrices, setFavoriteStocksPrices] = useState<Map<string, Stock>>(new Map());
+  const [isLoadingFavoritePrices, setIsLoadingFavoritePrices] = useState(false);
 
   // 隱藏的股票列表（從 localStorage 載入）
   const [hiddenStocks, setHiddenStocks] = useState<Set<string>>(() =>
@@ -404,6 +410,53 @@ function App() {
     }
   };
 
+  // 更新收藏股票即時價格（使用 FinMind API）
+  const updateFavoriteStocksPrices = useCallback(async () => {
+    if (!currentUser || userStocksFromDB.length === 0) {
+      return;
+    }
+
+    // 獲取收藏股票代碼列表
+    const favoriteSymbols = userStocksFromDB
+      .filter(stock => favorites.has(stock.symbol))
+      .map(stock => stock.symbol);
+
+    if (favoriteSymbols.length === 0) {
+      return;
+    }
+
+    setIsLoadingFavoritePrices(true);
+
+    try {
+      const prices = await getStockQuotes(favoriteSymbols);
+      setFavoriteStocksPrices(prices);
+      
+      if (import.meta.env.DEV) {
+        console.log(`成功更新 ${prices.size} 筆收藏股票價格`);
+      }
+    } catch (error) {
+      console.error('更新收藏股票價格失敗:', error);
+    } finally {
+      setIsLoadingFavoritePrices(false);
+    }
+  }, [currentUser, userStocksFromDB, favorites]);
+
+  // 更新 Fear and Greed Index（使用 Finnhub API）
+  const updateFearGreedIndex = useCallback(async () => {
+    try {
+      const sentiment = await getFearGreedIndex();
+      if (sentiment) {
+        setMarketSentiment(sentiment);
+        if (import.meta.env.DEV) {
+          console.log('Fear and Greed Index 更新成功:', sentiment);
+        }
+      }
+    } catch (error) {
+      console.error('更新 Fear and Greed Index 失敗:', error);
+      // 保持現有值不變
+    }
+  }, []);
+
   // 處理登入成功
   const handleLoginSuccess = async (userId: string) => {
     setCurrentUser(userId);
@@ -436,12 +489,12 @@ function App() {
     }
   };
 
-  // 市場情緒數據
-  const marketSentiment = {
-    level: 'Extreme Fear' as const,
+  // 市場情緒數據（從 Finnhub API 獲取）
+  const [marketSentiment, setMarketSentiment] = useState<MarketSentiment>({
+    level: 'Extreme Fear',
     index: 4,
-    color: 'red',
-  };
+    color: '#ef4444',
+  });
 
   // 切換收藏狀態
   // 處理收藏切換（加入收藏時顯示確認對話框，確認後寫入資料庫）
@@ -656,23 +709,49 @@ function App() {
       // #endregion
     }
 
-    // 策略過濾（目前使用模擬邏輯）
+    // 策略過濾
     if (activeStrategy !== 'all') {
-      stocks = stocks.filter((stock) => {
-        switch (activeStrategy) {
-          case 'bullish':
-            // 多頭排列：價格上漲
-            return stock.change > 0;
-          case 'institutional':
-            // 法人抬轎：CHIPS 較高
-            return (stock.chips || 0) > 60;
-          case 'shortsqueeze':
-            // 軋空警訊：價格上漲且成交量較大
-            return stock.change > 0 && (stock.volume || 0) > 40000000;
-          default:
-            return true;
-        }
-      });
+      if (activeStrategy === 'favorites') {
+        // 我的收藏：只顯示資料庫中的收藏股票
+        const favoriteSymbols = new Set(
+          userStocksFromDB
+            .filter(stock => favorites.has(stock.symbol))
+            .map(stock => stock.symbol)
+        );
+        
+        stocks = stocks.filter((stock) => favoriteSymbols.has(stock.symbol));
+        
+        // 使用即時價格更新股票數據
+        stocks = stocks.map((stock) => {
+          const realTimePrice = favoriteStocksPrices.get(stock.symbol);
+          if (realTimePrice) {
+            return {
+              ...stock,
+              price: realTimePrice.price,
+              change: realTimePrice.change,
+              volume: realTimePrice.volume ?? stock.volume,
+            };
+          }
+          // 如果沒有即時價格，使用資料庫中的價格作為 fallback
+          return stock;
+        });
+      } else {
+        stocks = stocks.filter((stock) => {
+          switch (activeStrategy) {
+            case 'bullish':
+              // 多頭排列：價格上漲
+              return stock.change > 0;
+            case 'institutional':
+              // 法人抬轎：CHIPS 較高
+              return (stock.chips || 0) > 60;
+            case 'shortsqueeze':
+              // 軋空警訊：價格上漲且成交量較大
+              return stock.change > 0 && (stock.volume || 0) > 40000000;
+            default:
+              return true;
+          }
+        });
+      }
     }
 
     // 排序
@@ -721,7 +800,7 @@ function App() {
       // 返回空陣列而不是崩潰，讓 UI 顯示「沒有符合條件的股票」
       return [];
     }
-  }, [activeStrategy, favorites, sortType, searchQuery, queriedStocks, hiddenStocks, userStocksFromDB]);
+  }, [activeStrategy, favorites, sortType, searchQuery, queriedStocks, hiddenStocks, userStocksFromDB, favoriteStocksPrices]);
 
   // 追蹤已從資料庫載入的股票代號（避免重複儲存）
   const loadedStockSymbolsRef = useRef<Set<string>>(new Set());
@@ -763,6 +842,42 @@ function App() {
       clearInterval(intervalId);
     };
   }, [currentUser, gasUrl]); // 依賴：用戶狀態、GAS URL
+
+  // 定期更新收藏股票即時價格（每 30 秒）
+  useEffect(() => {
+    if (!currentUser || userStocksFromDB.length === 0) {
+      return;
+    }
+
+    // 立即更新一次
+    updateFavoriteStocksPrices();
+
+    // 設置每 30 秒自動刷新
+    const intervalId = setInterval(() => {
+      if (currentUser && userStocksFromDB.length > 0) {
+        updateFavoriteStocksPrices();
+      }
+    }, 30000); // 30 秒
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [currentUser, userStocksFromDB, updateFavoriteStocksPrices]);
+
+  // 定期更新 Fear and Greed Index（每 5 分鐘）
+  useEffect(() => {
+    // 立即更新一次
+    updateFearGreedIndex();
+
+    // 設置每 5 分鐘自動刷新
+    const intervalId = setInterval(() => {
+      updateFearGreedIndex();
+    }, 300000); // 5 分鐘 = 300000 毫秒
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [updateFearGreedIndex]);
 
   // 追蹤 AI 報告載入狀態的 ref（避免重複呼叫）
   const isLoadingAIReportRef = useRef(false);
@@ -835,13 +950,21 @@ function App() {
         ) : (
           <>
             {/* 市場情緒 */}
-            <MarketSentiment sentiment={marketSentiment} />
+            <MarketSentimentComponent sentiment={marketSentiment} />
 
             {/* 策略按鈕 */}
-            <StrategyButtons
-              activeStrategy={activeStrategy}
-              onStrategyChange={setActiveStrategy}
-            />
+            <div className="flex items-center gap-3">
+              <StrategyButtons
+                activeStrategy={activeStrategy}
+                onStrategyChange={setActiveStrategy}
+              />
+              {isLoadingFavoritePrices && activeStrategy === 'favorites' && (
+                <div className="text-sm text-gray-400 flex items-center gap-2">
+                  <span className="animate-spin">⏳</span>
+                  <span>更新即時價格中...</span>
+                </div>
+              )}
+            </div>
 
             {/* 股票表格 */}
             <StockTable

@@ -147,3 +147,8 @@ const [sortType, setSortType] = useState<SortType>('default');
 ---
 
 **實現完成**: 所有按鈕功能已實現並通過構建測試 ✅
+
+
+
+
+

@@ -1,6 +1,6 @@
 # 部署狀態報告
 
-**部署時間**: 2025-12-16 22:00+ (最新)  
+**部署時間**: 2025-12-16 (最新)  
 **部署方式**: GitHub Pages (gh-pages)
 
 ---
@@ -29,9 +29,9 @@
 
 ```
 dist/index.html                   0.53 kB (gzip: 0.31 kB)
-dist/assets/index-DjLL73eJ.css   22.82 kB (gzip: 5.52 kB)
-dist/assets/index-YtNFEaK7.js   334.90 kB (gzip: 107.04 kB)
-構建時間: 407ms
+dist/assets/index-CMPlO3zZ.css   23.26 kB (gzip: 5.59 kB)
+dist/assets/index-DwAyXfaT.js   344.79 kB (gzip: 109.22 kB)
+構建時間: 389ms
 ```
 
 - ✅ TypeScript 編譯成功
@@ -50,6 +50,64 @@ Published
 ```
 
 **部署位置**: https://qwerboy-design.github.io/gemini-fintech-pro/
+
+---
+
+## 🆕 新增功能
+
+### 股票資料庫載入功能（最新）
+
+**功能描述**：
+- ✅ **自動載入資料庫股票**：登入後自動從 Google Sheets 載入用戶的所有股票記錄
+- ✅ **顯示最新記錄**：每個股票代號只顯示最新一筆記錄（依 UpdatedAt 排序）
+- ✅ **數據優先級**：資料庫股票優先於本地模擬數據
+- ✅ **自動同步**：儲存/刪除股票後自動重新載入列表
+- ✅ **收藏狀態同步**：收藏狀態改變時自動更新資料庫股票的收藏標記
+- ✅ **避免重複寫入**：使用 `loadedStockSymbolsRef` 追蹤已載入的股票，自動儲存功能只儲存新添加的股票，避免重複寫入資料庫
+- ✅ **完整刪除功能**：刪除股票時會同步刪除資料庫中該 UserId 和股票代號的所有記錄（不只是第一筆）
+
+**使用方式**：
+1. 登入帳號後，系統會自動從資料庫載入所有儲存的股票
+2. 股票清單會顯示每支股票的最新一筆記錄
+3. 儲存新股票或刪除股票後，列表會自動刷新
+4. 所有資料庫中的股票都會顯示在清單中
+
+**技術實現**：
+- **後端**: Google Apps Script `handleGetUserStocks` 函數，從 UserStocks sheet 讀取並過濾數據
+- **前端服務**: `getUserStocksFromGAS` 函數，使用雙策略 CORS 處理
+- **前端應用**: `loadUserStocksFromDB` 函數，在登入時自動載入，並合併到股票列表顯示
+- **刪除功能**: `deleteStockRecord` 函數已更新，會刪除指定 UserId 和股票代號的所有記錄（從後往前刪除，避免索引問題）
+
+**⚠️ 重要提示**: 
+- Google Apps Script 後端代碼需要手動更新，請參考 `GAS_DELETE_STOCK_UPDATE.md` 進行更新
+
+**構建輸出**（最新）：
+- `dist/assets/index-CMPlO3zZ.css` (23.26 kB, gzip: 5.59 kB)
+- `dist/assets/index-DwAyXfaT.js` (344.79 kB, gzip: 109.22 kB)
+
+---
+
+### 搜尋股票收藏功能
+
+**功能描述**：
+- ✅ **點擊搜尋按鈕觸發搜尋**：搜尋改為按鈕觸發，不再是自動搜尋
+- ✅ **搜尋結果顯示**：搜尋結果合併到現有股票表格中顯示
+- ✅ **收藏確認機制**：點擊星號加入收藏時顯示確認對話框（取消收藏不需要確認）
+- ✅ **資料庫寫入**：確認後立即將股票寫入 UserStocks 資料庫
+
+**使用方式**：
+1. 在搜尋框中輸入股票代號或名稱
+2. 點擊「搜尋」按鈕或按 Enter 鍵觸發搜尋
+3. 搜尋結果會顯示在股票列表中
+4. 點擊搜尋結果股票的星號圖標
+5. 確認對話框會詢問是否收藏並儲存到資料庫
+6. 點擊確認後，股票會加入收藏並寫入 UserStocks 資料庫
+
+**技術實現**：
+- 修改 `Header` 組件添加搜尋按鈕 UI
+- 重構 `App.tsx` 中的搜尋邏輯為按鈕觸發
+- 修改 `toggleFavorite` 函數，添加確認對話框和資料庫寫入邏輯
+- 完善錯誤處理和用戶提示
 
 ---
 
@@ -172,7 +230,13 @@ VITE_GAS_URL=https://script.google.com/macros/s/AKfycbzoEKE_10KGmlx8DfLgPa1SohOU
 
 ---
 
-**最後更新**: 2025-12-16 22:00+  
+**最後更新**: 2025-12-16 (已部署：修復重複寫入資料庫問題 + 完整刪除股票功能)  
 **部署狀態**: ✅ **成功部署**  
 **Google Apps Script 狀態**: ✅ **授權已完成，Sheet 訪問正常**  
-**CORS 優化**: ✅ **前端雙重策略已實現**（無 headers → text/plain）
+**CORS 優化**: ✅ **前端雙重策略已實現**（無 headers → text/plain）  
+**最新功能**: ✅ **股票資料庫載入功能已上線**
+
+
+
+
+

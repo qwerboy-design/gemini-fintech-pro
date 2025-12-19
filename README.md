@@ -21,15 +21,17 @@
 
 ## 🎯 專案簡介
 
-Gemini FinTech Pro 是一個基於 React + TypeScript 構建的現代化股票資訊管理系統，提供即時股票價格查詢、市場情緒分析、策略篩選和用戶登入等功能。系統採用深色主題設計，支持響應式佈局，並整合 Google Apps Script 作為後端服務。
+Gemini FinTech Pro 是一個基於 React + TypeScript 構建的現代化股票資訊管理系統，提供即時股票價格查詢、市場情緒分析、策略篩選、AI 智能日報和用戶登入等功能。系統採用深色主題設計，支持響應式佈局，並整合 Google Apps Script 作為後端服務，以及 Google Gemini API 提供 AI 智能分析能力。
 
 ### 主要特性
 
 - ✅ **即時股票查詢**: 支持本地數據和外部 API 查詢
+- ✅ **AI 智能日報**: 使用 Gemini 2.5 Flash 模型生成每日股市報告，整合 Google Search 獲取即時資訊
 - ✅ **市場情緒分析**: 視覺化市場情緒指標
 - ✅ **策略篩選**: 多種投資策略過濾（多頭排列、法人抬轎、軋空警訊）
 - ✅ **用戶登入系統**: 整合 Google Apps Script 存儲用戶資料
-- ✅ **數據持久化**: 使用 localStorage 保存收藏和搜索歷史
+- ✅ **用戶股票數據庫**: 登入後可保存/刪除股票到資料庫，自動同步功能
+- ✅ **數據持久化**: 使用 localStorage 保存收藏、搜索歷史、登入狀態和 AI 報告快取
 - ✅ **響應式設計**: 適配各種屏幕尺寸
 - ✅ **動畫效果**: 使用 Framer Motion 提供流暢的用戶體驗
 
@@ -55,7 +57,9 @@ Gemini FinTech Pro 是一個基於 React + TypeScript 構建的現代化股票�
 
 ### 後端服務
 
-- **Google Apps Script**: 無服務器後端，存儲登入記錄到 Google Sheets
+- **Google Apps Script**: 無服務器後端，存儲登入記錄和用戶股票數據庫到 Google Sheets
+- **Google Gemini API (@google/genai 1.33.0)**: AI 智能分析服務，使用 gemini-2.5-flash 模型
+- **Google Search Grounding**: 即時資訊獲取工具，整合到 Gemini API 中
 
 ### 部署
 
@@ -91,6 +95,7 @@ Gemini FinTech Pro 是一個基於 React + TypeScript 構建的現代化股票�
 - ✅ 一鍵收藏/取消收藏
 - ✅ 收藏狀態持久化（localStorage）
 - ✅ 收藏數量顯示在 Header
+- ✅ 登入後自動同步到資料庫（Google Sheets）
 
 ### 2. 策略篩選功能
 
@@ -130,12 +135,37 @@ Gemini FinTech Pro 是一個基於 React + TypeScript 構建的現代化股票�
 - ✅ 配置狀態檢查和提示
 - ✅ 詳細的錯誤診斷
 
+#### 用戶股票數據庫
+- ✅ 登入後自動載入用戶股票列表
+- ✅ 保存股票到資料庫（saveStockToGAS）
+- ✅ 從資料庫刪除股票（deleteStockFromGAS）
+- ✅ 獲取用戶股票列表（getUserStocksFromGAS）
+- ✅ 每 30 秒自動刷新資料庫股票清單
+
 ### 6. UI/UX 功能
 
 #### 標籤導航
 - ✅ **金額排行**: 股票排行榜
-- ✅ **AI 智能日報**: AI 分析功能（預留）
+- ✅ **AI 智能日報**: AI 分析功能（已實現）
 - ✅ **國際盤**: 國際市場數據（預留）
+
+### 7. AI 智能日報功能
+
+- ✅ **AI 智能日報**: 使用 Gemini 2.5 Flash 模型生成每日股市報告
+- ✅ **Google Search 整合**: 獲取即時股市資訊，確保報告內容最新
+- ✅ **智能快取機制**: 同一天內只呼叫一次 API，節省成本並提升性能
+- ✅ **報告內容限制**: 500 字以內，確保內容精簡實用
+- ✅ **錯誤處理和重試機制**: 完善的錯誤處理，確保用戶體驗
+- ✅ **載入狀態顯示**: 清晰的載入提示和錯誤訊息
+
+### 8. 用戶股票數據庫功能
+
+#### 股票收藏與資料庫同步
+- ✅ **登入後保存股票**: 收藏時自動寫入資料庫
+- ✅ **刪除股票功能**: 支持從資料庫中刪除股票
+- ✅ **自動同步機制**: 每 30 秒自動刷新資料庫股票清單
+- ✅ **即時更新**: 收藏/刪除操作後立即同步到資料庫
+- ✅ **數據持久化**: 用戶股票數據存儲在 Google Sheets 中
 
 #### 鍵盤快捷鍵
 - ✅ `Ctrl/Cmd + K`: 打開搜索框
@@ -152,69 +182,143 @@ Gemini FinTech Pro 是一個基於 React + TypeScript 構建的現代化股票�
 
 ## 🏗 技術架構
 
-### 系統架構圖
+### 完整系統架構圖
 
 ```mermaid
 graph TB
-    A[用戶瀏覽器] --> B[React App]
-    B --> C[Header 組件]
-    B --> D[MarketSentiment 組件]
-    B --> E[StrategyButtons 組件]
-    B --> F[StockTable 組件]
-    B --> G[LoginModal 組件]
+    subgraph "前端層"
+        A[React App<br/>App.tsx]
+        B[Header 組件]
+        C[MarketSentiment 組件]
+        D[StrategyButtons 組件]
+        E[StockTable 組件]
+        F[LoginModal 組件]
+        G[AIDailyReport 組件]
+    end
     
-    C --> H[搜索功能]
-    C --> I[登入功能]
+    subgraph "服務層"
+        H[stockService<br/>股票查詢服務]
+        I[gasService<br/>Google Apps Script 服務]
+        J[geminiService<br/>Gemini API 服務]
+    end
     
-    H --> J[stockService]
-    I --> K[gasService]
+    subgraph "外部服務"
+        K[Google Gemini API<br/>gemini-2.5-flash]
+        L[Google Search Grounding<br/>即時資訊獲取]
+        M[Google Apps Script<br/>Web App]
+        N[外部股票 API<br/>可選]
+    end
     
-    J --> L[本地 mockStocks]
-    J --> M[外部股票 API]
+    subgraph "數據存儲"
+        O[localStorage]
+        P[Google Sheets]
+    end
     
-    K --> N[Google Apps Script]
-    N --> O[Google Sheets]
+    A --> B
+    A --> C
+    A --> D
+    A --> E
+    A --> F
+    A --> G
     
-    B --> P[localStorage]
-    P --> Q[收藏狀態]
-    P --> R[搜索歷史]
-    P --> S[登入狀態]
+    B --> H
+    B --> I
+    G --> J
+    E --> I
     
-    style B fill:#8b5cf6
-    style N fill:#4285f4
-    style O fill:#34a853
-    style P fill:#f59e0b
+    H --> N
+    I --> M
+    J --> K
+    K --> L
+    
+    M --> P
+    
+    A --> O
+    O --> O1[收藏狀態]
+    O --> O2[搜索歷史]
+    O --> O3[登入狀態]
+    O --> O4[AI 報告快取]
+    
+    style A fill:#8b5cf6
+    style G fill:#8b5cf6
+    style J fill:#ea4335
+    style K fill:#ea4335
+    style M fill:#4285f4
+    style P fill:#34a853
+    style O fill:#f59e0b
 ```
 
-### 數據流程圖
+### AI 智能日報流程圖
 
 ```mermaid
 sequenceDiagram
     participant U as 用戶
-    participant H as Header
     participant A as App.tsx
-    participant SS as stockService
-    participant API as 股票 API
+    participant AR as AIDailyReport
+    participant GS as geminiService
     participant LS as localStorage
+    participant GA as Gemini API
+    participant GS2 as Google Search
     
-    U->>H: 輸入搜索查詢
-    H->>A: handleSearchQueryChange
-    A->>A: Debounce (800ms)
-    A->>SS: queryStock
-    SS->>SS: 檢查本地數據
-    alt 本地找到
-        SS-->>A: 返回本地數據
-    else 需要 API 查詢
-        SS->>API: 查詢股票價格
-        API-->>SS: 返回股票數據
-        SS-->>A: 返回查詢結果
+    U->>A: 點擊「AI 智能日報」標籤
+    A->>A: loadAIDailyReport()
+    A->>GS: getAIDailyReport()
+    GS->>LS: 檢查快取
+    alt 有快取且為今天
+        LS-->>GS: 返回快取內容
+        GS-->>A: 返回快取報告
+        A-->>U: 顯示報告
+    else 無快取或非今天
+        GS->>GS: 初始化 Gemini API 客戶端
+        GS->>GS: 配置 Google Search 工具
+        GS->>GA: 調用 generateContent（帶超時保護）
+        GA->>GS2: 使用 Google Search 獲取即時資訊
+        GS2-->>GA: 返回搜尋結果
+        GA->>GA: 生成 AI 報告（500 字限制）
+        GA-->>GS: 返回生成的報告
+        GS->>LS: 保存到快取（包含日期）
+        GS-->>A: 返回報告內容
+        A->>AR: 更新 UI 顯示報告
+        AR-->>U: 顯示 AI 生成的報告
     end
-    A->>LS: 保存搜索歷史
-    A->>H: 更新顯示
-    H-->>U: 顯示股票列表
 ```
 
-### 登入流程圖
+### 用戶股票數據庫流程圖
+
+```mermaid
+sequenceDiagram
+    participant U as 用戶
+    participant ST as StockTable
+    participant A as App.tsx
+    participant GS as gasService
+    participant GAS as Google Apps Script
+    participant SH as Google Sheets
+    
+    U->>ST: 點擊收藏/刪除股票
+    ST->>ST: 顯示確認對話框
+    U->>ST: 確認操作
+    ST->>A: 更新本地收藏狀態
+    alt 已登入
+        A->>GS: saveStockToGAS() / deleteStockFromGAS()
+        GS->>GAS: POST 請求（action: saveStock/deleteStock）
+        GAS->>GAS: 驗證用戶和數據
+        GAS->>SH: 寫入/更新/刪除 Google Sheets
+        SH-->>GAS: 確認操作
+        GAS-->>GS: 返回成功響應
+        GS-->>A: 返回結果
+        A->>A: loadUserStocksFromDB() 重新載入
+        A->>GS: getUserStocksFromGAS()
+        GS->>GAS: POST 請求（action: getUserStocks）
+        GAS->>SH: 讀取用戶股票列表
+        SH-->>GAS: 返回股票列表
+        GAS-->>GS: 返回股票數據
+        GS-->>A: 返回股票列表
+        A->>ST: 更新 UI 顯示
+    end
+    ST-->>U: 顯示更新後的股票列表
+```
+
+### 登入與數據同步流程圖
 
 ```mermaid
 sequenceDiagram
@@ -223,50 +327,119 @@ sequenceDiagram
     participant A as App.tsx
     participant GS as gasService
     participant GAS as Google Apps Script
-    participant GS2 as Google Sheets
+    participant SH as Google Sheets
+    participant LS as localStorage
     
     U->>LM: 輸入帳號並提交
     LM->>LM: 表單驗證
-    LM->>GS: submitLoginToGAS
-    GS->>GAS: POST 請求
+    LM->>GS: submitLoginToGAS()
+    GS->>GAS: POST 請求（action: login）
     GAS->>GAS: 驗證數據
-    GAS->>GS2: 寫入登入記錄
-    GS2-->>GAS: 確認寫入
+    GAS->>SH: 寫入登入記錄
+    SH-->>GAS: 確認寫入
     GAS-->>GS: 返回成功響應
     GS-->>LM: 返回結果
-    LM->>A: onLoginSuccess
+    LM->>A: onLoginSuccess(userId)
+    A->>LS: 保存登入狀態
     A->>A: 更新登入狀態
-    A->>A: 保存到 localStorage
-    A-->>U: 顯示登入成功
+    A->>A: loadUserStocksFromDB() 自動載入
+    A->>GS: getUserStocksFromGAS()
+    GS->>GAS: POST 請求（action: getUserStocks）
+    GAS->>SH: 讀取用戶股票列表
+    SH-->>GAS: 返回股票列表
+    GAS-->>GS: 返回股票數據
+    GS-->>A: 返回股票列表
+    A->>A: 設置 30 秒自動刷新定時器
+    A-->>U: 顯示登入成功並載入股票
+    
+    loop 每 30 秒自動同步
+        A->>GS: getUserStocksFromGAS()
+        GS->>GAS: POST 請求
+        GAS->>SH: 讀取用戶股票列表
+        SH-->>GAS: 返回股票列表
+        GAS-->>GS: 返回股票數據
+        GS-->>A: 返回股票列表
+        A->>A: 更新本地股票列表
+    end
 ```
 
-### 組件層級結構
+### 股票搜索流程圖
+
+```mermaid
+sequenceDiagram
+    participant U as 用戶
+    participant H as Header
+    participant A as App.tsx
+    participant SS as stockService
+    participant LD as 本地數據<br/>mockStocks
+    participant API as 外部股票 API
+    participant LS as localStorage
+    
+    U->>H: 輸入搜索查詢
+    H->>A: handleSearchQueryChange
+    A->>A: Debounce (800ms)
+    U->>H: 點擊搜尋或按 Enter
+    H->>A: handleSearch
+    A->>SS: queryStock(query)
+    SS->>SS: 檢查本地 mockStocks
+    alt 本地找到
+        SS-->>A: 返回本地數據
+    else 未找到且為 4 位數代碼
+        SS->>API: 查詢股票價格
+        alt API 成功
+            API-->>SS: 返回股票數據
+            SS-->>A: 返回查詢結果
+        else API 失敗
+            SS->>SS: 使用模擬數據 fallback
+            SS-->>A: 返回模擬數據
+        end
+    end
+    A->>LS: 保存搜索歷史（最多 10 條）
+    A->>A: 更新股票列表顯示
+    A-->>U: 顯示查詢結果
+```
+
+### 組件層級結構圖
 
 ```mermaid
 graph TD
-    A[App.tsx] --> B[Header]
-    A --> C[MarketSentiment]
-    A --> D[StrategyButtons]
-    A --> E[StockTable]
-    A --> F[LoginModal]
+    A[App.tsx<br/>主應用組件] --> B[Header<br/>頂部導航欄]
+    A --> C[MarketSentiment<br/>市場情緒組件]
+    A --> D[StrategyButtons<br/>策略按鈕組件]
+    A --> E[StockTable<br/>股票表格組件]
+    A --> F[LoginModal<br/>登入模態框]
+    A --> G[AIDailyReport<br/>AI 智能日報組件]
     
     B --> B1[搜索輸入框]
-    B --> B2[搜索歷史]
+    B --> B2[搜索歷史下拉]
     B --> B3[登入按鈕]
     B --> B4[收藏數量顯示]
     
-    E --> E1[股票行]
+    E --> E1[股票行組件]
     E --> E2[收藏按鈕]
     E --> E3[排序按鈕]
+    E --> E4[刪除按鈕]
     
     F --> F1[表單輸入]
-    F --> F2[錯誤訊息]
+    F --> F2[錯誤訊息顯示]
     F --> F3[載入狀態]
     
+    G --> G1[報告內容顯示]
+    G --> G2[載入狀態]
+    G --> G3[錯誤訊息]
+    
+    A -.服務層.-> H[stockService]
+    A -.服務層.-> I[gasService]
+    A -.服務層.-> J[geminiService]
+    
     style A fill:#8b5cf6
+    style G fill:#8b5cf6
     style B fill:#6366f1
     style E fill:#6366f1
     style F fill:#6366f1
+    style H fill:#10b981
+    style I fill:#10b981
+    style J fill:#10b981
 ```
 
 ---
@@ -302,7 +475,7 @@ cp .env.example .env
 
 # 編輯 .env 文件，填入實際值
 # VITE_GAS_URL=您的_Google_Apps_Script_URL
-# VITE_GEMINI_API_KEY=您的_Gemini_API_Key（可選）
+# VITE_GEMINI_API_KEY=您的_Gemini_API_Key（AI 功能必需）
 ```
 
 4. **啟動開發服務器**
@@ -328,8 +501,18 @@ npm run dev
 # 從 Google Apps Script 部署後獲取的 URL
 VITE_GAS_URL=https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec
 
-# Google Gemini AI API Key（可選，用於未來 AI 功能）
+# Google Gemini AI API Key（必需，用於 AI 智能日報功能）
+# 獲取方式：前往 https://aistudio.google.com/app/apikey 創建 API Key
 VITE_GEMINI_API_KEY=your_gemini_api_key_here
+
+# FinMind API Key（可選，用於台股即時報價功能）
+# 獲取方式：前往 https://finmindtrade.com/ 註冊並獲取 API Key
+# 注意：即時資訊功能需要贊助會員
+VITE_FINMIND_API_KEY=your_finmind_api_key_here
+
+# Finnhub API Key（可選，用於 Fear and Greed Index）
+# 獲取方式：前往 https://finnhub.io/ 註冊並獲取 API Key
+VITE_FINNHUB_API_KEY=your_finnhub_api_key_here
 ```
 
 ### 環境變數驗證
@@ -427,12 +610,14 @@ gemini-fintech-pro/
 │   │   ├── LoginModal.tsx          # 登入模態框
 │   │   ├── MarketSentiment.tsx     # 市場情緒組件
 │   │   ├── StockTable.tsx          # 股票表格
-│   │   └── StrategyButtons.tsx     # 策略按鈕
+│   │   ├── StrategyButtons.tsx     # 策略按鈕
+│   │   └── AIDailyReport.tsx       # AI 智能日報組件
 │   ├── data/                       # 數據文件
 │   │   └── mockStocks.ts           # 模擬股票數據
 │   ├── services/                   # 服務層
 │   │   ├── gasService.ts           # Google Apps Script 服務
-│   │   └── stockService.ts         # 股票查詢服務
+│   │   ├── stockService.ts         # 股票查詢服務
+│   │   └── geminiService.ts        # Gemini API 服務
 │   ├── types/                      # TypeScript 類型定義
 │   │   └── stock.ts                # 股票相關類型
 │   ├── App.tsx                     # 主應用組件
@@ -528,6 +713,7 @@ gemini-fintech-pro/
 - `gemini-fintech-favorites`: 收藏的股票代碼數組
 - `gemini-fintech-search-history`: 搜索歷史數組（最多 10 條）
 - `gemini-fintech-user`: 當前登入用戶 ID
+- `gemini-fintech-ai-daily-report`: AI 報告快取（包含內容和日期）
 
 #### 數據格式
 
@@ -562,6 +748,21 @@ gemini-fintech-pro/
     "timestamp": "2025-12-16T10:00:00Z"
   }
   ```
+- **支持的 Actions**:
+  - `login`: 用戶登入
+  - `saveStock`: 保存股票到資料庫
+  - `deleteStock`: 從資料庫刪除股票
+  - `getUserStocks`: 獲取用戶股票列表
+
+#### Google Gemini API
+
+- **模型**: gemini-2.5-flash
+- **工具**: Google Search（用於即時資訊獲取）
+- **快取機制**: 同一天內只呼叫一次 API，節省成本
+- **內容限制**: 報告內容限制在 500 字以內
+- **錯誤處理**: 完善的錯誤處理和重試機制
+- **超時保護**: API 調用帶有超時保護機制
+- **API Key**: 從環境變數 `VITE_GEMINI_API_KEY` 讀取
 
 ---
 
@@ -710,8 +911,8 @@ npm run preview
 
 ### 代碼統計
 
-- **組件數量**: 5 個主要組件
-- **服務數量**: 2 個服務（stockService, gasService）
+- **組件數量**: 6 個主要組件（新增 AIDailyReport）
+- **服務數量**: 3 個服務（stockService, gasService, geminiService）
 - **類型定義**: 3 個主要 interface
 - **模擬數據**: 8+ 支股票數據
 
@@ -729,8 +930,8 @@ npm run preview
 
 - [ ] 整合真實股票 API（支持即時價格）
 - [ ] 添加股票詳細頁面
-- [ ] 實現 AI 智能日報功能（使用 Gemini API）
 - [ ] 添加技術指標圖表
+- [ ] 優化 AI 報告內容和格式
 
 ### 長期規劃
 
@@ -807,6 +1008,6 @@ npm run preview
 
 ---
 
-**最後更新**: 2025-12-16  
+**最後更新**: 2025-12-18  
 **版本**: 1.0.0  
 **狀態**: ✅ 生產就緒

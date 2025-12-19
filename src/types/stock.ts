@@ -42,3 +42,8 @@ export interface MarketSentiment {
   /** 顏色 */
   color: string;
 }
+
+
+
+
+

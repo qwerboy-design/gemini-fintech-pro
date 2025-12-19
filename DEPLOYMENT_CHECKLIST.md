@@ -251,3 +251,8 @@ curl https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec
 ---
 
 **最後更新**: 2025-12-16
+
+
+
+
+
