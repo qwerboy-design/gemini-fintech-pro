@@ -151,3 +151,4 @@ if (allFilesExist) {
   console.log('\n⚠️  部分功能驗證失敗，請檢查上述錯誤');
   process.exit(1);
 }
+

@@ -65,3 +65,4 @@ describe('StrategyButtons 組件', () => {
     expect(favoritesButton).not.toHaveClass('bg-purple-600');
   });
 });
+

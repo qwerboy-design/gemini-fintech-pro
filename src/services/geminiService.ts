@@ -78,19 +78,81 @@ export async function getDailyMarketReport(): Promise<string> {
 
   try {
     // 調用 GAS 後端（API Key 隱藏在後端）
-    const response = await fetch(gasUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'getGeminiReport',
-        timestamp: new Date().toISOString(),
-      }),
+    // 嘗試多種方法避免 CORS 預檢請求
+    const requestBody = JSON.stringify({
+      action: 'getGeminiReport',
+      timestamp: new Date().toISOString(),
     });
 
+    let response: Response | null = null;
+    let fetchError: unknown = null;
+
+    // 策略 1: 使用 text/plain 避免 CORS 預檢請求
+    try {
+      response = await fetch(gasUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+        body: requestBody,
+      });
+    } catch (error) {
+      fetchError = error;
+      // 策略 2: 完全不設置 Content-Type
+      try {
+        response = await fetch(gasUrl, {
+          method: 'POST',
+          body: requestBody,
+        });
+      } catch (error2) {
+        fetchError = error2;
+        // 策略 3: 使用標準 JSON
+        try {
+          response = await fetch(gasUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: requestBody,
+          });
+        } catch (error3) {
+          fetchError = error3;
+        }
+      }
+    }
+
+    // 如果所有方法都失敗
+    if (!response) {
+      const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError || '無法獲取響應');
+      if (errorMessage.includes('Failed to fetch') || 
+          errorMessage.includes('CORS') ||
+          errorMessage.includes('blocked') ||
+          fetchError instanceof TypeError) {
+        throw new Error(
+          '無法連接到 Google Apps Script（CORS 錯誤）。\n\n' +
+          '請確認以下設置：\n' +
+          '1. ✓ 前往 Google Apps Script 編輯器\n' +
+          '2. ✓ 點擊「部署」→「管理部署」\n' +
+          '3. ✓ 編輯部署，設置「具有存取權的使用者」為「任何人」\n' +
+          '4. ✓ 點擊「重新部署」\n' +
+          '5. ✓ 確認已更新 Code.gs 代碼（包含 handleGeminiReport 函數）\n' +
+          '6. ✓ 確認已在 Script Properties 中設置 GEMINI_API_KEY\n\n' +
+          '詳細說明請參考：GOOGLE_APPS_SCRIPT_SETUP.md'
+        );
+      }
+      throw new Error(`網絡請求失敗: ${errorMessage}`);
+    }
+
+    // 檢查響應狀態
     if (!response.ok) {
-      throw new Error(`HTTP 錯誤: ${response.status}`);
+      const errorText = await response.text().catch(() => '無法讀取錯誤訊息');
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { message: errorText || `HTTP 錯誤: ${response.status}` };
+      }
+      throw new Error(errorData.message || `HTTP 錯誤: ${response.status}`);
     }
 
     const data = await response.json();
@@ -116,6 +178,11 @@ export async function getDailyMarketReport(): Promise<string> {
     return content;
   } catch (error) {
     if (error instanceof Error) {
+      // 如果錯誤訊息已經包含詳細說明，直接拋出
+      if (error.message.includes('無法連接到 Google Apps Script') || 
+          error.message.includes('CORS')) {
+        throw error;
+      }
       if (error.message.includes('超時')) {
         throw new Error('API 呼叫超時，請稍後再試');
       }
@@ -135,4 +202,5 @@ export function clearReportCache(): void {
     console.error('清除快取失敗:', error);
   }
 }
+
 
