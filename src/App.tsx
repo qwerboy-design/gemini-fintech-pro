@@ -326,8 +326,8 @@ function App() {
     try {
       const result = await getUserStocksFromGAS(gasUrl, userId);
       
-      if (result.success && result.data && result.data.stocks) {
-        // 將 StockData 轉換為 Stock 格式，並去重（保留最後一個）
+      if (result.success && result.data && result.data.stocks && result.data.stocks.length > 0) {
+        // 資料庫有股票記錄：轉換為 Stock 格式，並去重（保留最後一個）
         const stocksMap = new Map<string, Stock>();
         result.data.stocks.forEach((stockData: StockData) => {
           stocksMap.set(stockData.symbol, {
@@ -344,20 +344,29 @@ function App() {
         
         const stocks = Array.from(stocksMap.values());
 
+        // 設置資料庫股票（會自動顯示在股票清單中）
         setUserStocksFromDB(stocks);
         
+        // 清空臨時查詢結果（queriedStocks），因為資料庫已有記錄
+        setQueriedStocks([]);
+        
         if (import.meta.env.DEV) {
-          console.log(`成功載入 ${stocks.length} 筆股票記錄`);
+          console.log(`成功載入 ${stocks.length} 筆股票記錄，已清空臨時查詢結果`);
         }
       } else {
+        // 資料庫沒有股票記錄：清空資料庫股票和臨時查詢結果
         setUserStocksFromDB([]);
+        setQueriedStocks([]);
+        
         if (import.meta.env.DEV) {
-          console.log('沒有找到股票記錄或載入失敗');
+          console.log('資料庫沒有股票記錄，已清空股票清單');
         }
       }
     } catch (error) {
       console.error('載入用戶股票失敗:', error);
+      // 發生錯誤時，也清空股票清單
       setUserStocksFromDB([]);
+      setQueriedStocks([]);
     }
   };
 
