@@ -100,14 +100,25 @@ export function LoginModal({
           mode: 'cors',
         });
         
-        // 請求成功（沒有拋出異常），繼續處理響應
-        fetchError = null;
+        // 檢查響應狀態，如果狀態碼為 0，可能是 CORS 錯誤
+        if (response.status === 0) {
+          // 狀態碼 0 通常表示 CORS 錯誤或網絡錯誤
+          fetchError = new Error('CORS error or network error');
+          response = null;
+        } else {
+          // 請求成功（沒有拋出異常且狀態碼正常），繼續處理響應
+          fetchError = null;
+        }
       } catch (firstError) {
         fetchError = firstError;
+        response = null;
         if (import.meta.env.DEV) {
           console.warn('方法 1 失敗（無 headers），嘗試方法 2 (text/plain):', firstError);
         }
-        
+      }
+      
+      // 如果第一個方法失敗（CORS 錯誤或網絡錯誤），嘗試第二個方法
+      if (!response || fetchError) {
         // 策略 2: 使用 text/plain Content-Type（簡單請求的 Content-Type）
         try {
           response = await fetch(gasUrl, {
@@ -118,13 +129,21 @@ export function LoginModal({
             body: requestBody,
             mode: 'cors',
           });
-          fetchError = null; // 清除錯誤，因為方法 2 成功了
+          
+          // 檢查響應狀態
+          if (response.status === 0) {
+            // 第二個方法也失敗了
+            fetchError = new Error('CORS error or network error');
+            response = null;
+          } else {
+            fetchError = null; // 清除錯誤，因為方法 2 成功了
+          }
         } catch (secondError) {
           fetchError = secondError;
           response = null; // 確保 response 為 null
           // 兩種方法都失敗，準備拋出詳細錯誤
           if (import.meta.env.DEV) {
-            console.error('所有方法都失敗:', { firstError, secondError });
+            console.error('所有方法都失敗:', { firstError: fetchError, secondError });
           }
         }
       }
