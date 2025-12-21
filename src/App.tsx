@@ -327,17 +327,22 @@ function App() {
       const result = await getUserStocksFromGAS(gasUrl, userId);
       
       if (result.success && result.data && result.data.stocks) {
-        // 將 StockData 轉換為 Stock 格式
-        const stocks: Stock[] = result.data.stocks.map((stockData: StockData) => ({
-          symbol: stockData.symbol,
-          name: stockData.name,
-          price: stockData.price,
-          change: stockData.change,
-          volume: stockData.volume,
-          chips: stockData.chips,
-          buySellRatio: stockData.buySellRatio,
-          isFavorite: favorites.has(stockData.symbol),
-        }));
+        // 將 StockData 轉換為 Stock 格式，並去重（保留最後一個）
+        const stocksMap = new Map<string, Stock>();
+        result.data.stocks.forEach((stockData: StockData) => {
+          stocksMap.set(stockData.symbol, {
+            symbol: stockData.symbol,
+            name: stockData.name,
+            price: stockData.price,
+            change: stockData.change,
+            volume: stockData.volume,
+            chips: stockData.chips,
+            buySellRatio: stockData.buySellRatio,
+            isFavorite: favorites.has(stockData.symbol),
+          });
+        });
+        
+        const stocks = Array.from(stocksMap.values());
 
         setUserStocksFromDB(stocks);
         
@@ -357,61 +362,43 @@ function App() {
   };
 
   // 更新股票即時價格（使用 FinMind API）
-  // 此函數會更新所有顯示的股票價格，不僅限於收藏股票
+  // 只查詢股票清單（mockStocks + userStocksFromDB）和收藏的股票
   const updateFavoriteStocksPrices = useCallback(async () => {
     // 獲取需要更新價格的股票代碼列表
-    // 1. 優先更新收藏股票
-    // 2. 同時更新當前顯示的所有股票（以便在非收藏策略下也能看到最新價格）
-    let symbolsToUpdate: string[] = [];
+    // 1. 股票清單：mockStocks + userStocksFromDB（去重）
+    // 2. 收藏的股票（favorites）
+    // 注意：不查詢 queriedStocks，因為這些是臨時查詢結果
+    const symbolsToUpdate = new Set<string>();
     
-    // 收集收藏股票的代碼
-    if (currentUser && userStocksFromDB.length > 0) {
-      // 從資料庫股票中獲取收藏的股票
-      const favoriteSymbols = userStocksFromDB
-        .filter(stock => favorites.has(stock.symbol))
-        .map(stock => stock.symbol);
-      symbolsToUpdate.push(...favoriteSymbols);
-    } else {
-      // 使用本地收藏列表（從 favorites Set 中獲取）
-      symbolsToUpdate.push(...Array.from(favorites));
-    }
+    // 1. 添加股票清單中的股票（mockStocks + userStocksFromDB）
+    mockStocks.forEach(stock => symbolsToUpdate.add(stock.symbol));
+    userStocksFromDB.forEach(stock => symbolsToUpdate.add(stock.symbol));
     
-    // 收集當前顯示的所有股票代碼（從 mockStocks、userStocksFromDB、queriedStocks）
-    const allDisplayedSymbols = new Set<string>();
-    mockStocks.forEach(stock => allDisplayedSymbols.add(stock.symbol));
-    userStocksFromDB.forEach(stock => allDisplayedSymbols.add(stock.symbol));
-    queriedStocks.forEach(stock => allDisplayedSymbols.add(stock.symbol));
-    
-    // 將所有顯示的股票代碼加入更新列表（去重）
-    symbolsToUpdate.push(...Array.from(allDisplayedSymbols));
-    symbolsToUpdate = Array.from(new Set(symbolsToUpdate)); // 去重
+    // 2. 添加收藏的股票
+    favorites.forEach(symbol => symbolsToUpdate.add(symbol));
 
-    if (symbolsToUpdate.length === 0) {
+    if (symbolsToUpdate.size === 0) {
       return;
     }
 
     setIsLoadingFavoritePrices(true);
 
     try {
-      const prices = await getStockQuotes(symbolsToUpdate);
-      // 更新所有股票的價格（合併到現有的價格 Map 中）
-      setAllStocksPrices((prev) => {
-        const updated = new Map(prev);
-        prices.forEach((stock, symbol) => {
-          updated.set(symbol, stock);
-        });
-        return updated;
-      });
+      const symbolsArray = Array.from(symbolsToUpdate);
+      const prices = await getStockQuotes(symbolsArray);
+      
+      // 完全替換價格 Map，清除舊的價格數據，只保留最新的
+      setAllStocksPrices(new Map(prices));
       
       if (import.meta.env.DEV) {
-        console.log(`成功更新 ${prices.size} 筆股票價格（共 ${symbolsToUpdate.length} 筆請求）`);
+        console.log(`成功更新 ${prices.size} 筆股票價格（共 ${symbolsArray.length} 筆請求）`);
       }
     } catch (error) {
       console.error('更新股票價格失敗:', error);
     } finally {
       setIsLoadingFavoritePrices(false);
     }
-  }, [currentUser, userStocksFromDB, favorites, queriedStocks]);
+  }, [userStocksFromDB, favorites]);
 
   // 更新 Fear and Greed Index（使用 Finnhub API）
   const updateFearGreedIndex = useCallback(async () => {
@@ -610,10 +597,6 @@ function App() {
   // 過濾和排序股票
   const filteredAndSortedStocks = useMemo(() => {
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:611',message:'filteredAndSortedStocks start',data:{mockStocksCount:mockStocks.length,userStocksFromDBCount:userStocksFromDB.length,queriedStocksCount:queriedStocks.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-      
       // 合併本地股票、資料庫股票和查詢到的股票
       // 使用 Map 確保每個股票代號只出現一次（以最後一個為準）
       const stocksMap = new Map<string, Stock>();
@@ -623,46 +606,38 @@ function App() {
         stocksMap.set(stock.symbol, stock);
       });
       
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:620',message:'After adding mockStocks',data:{stocksMapSize:stocksMap.size},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-      
-      // 2. 用資料庫股票覆蓋或添加（資料庫數據優先）
+      // 2. 用資料庫股票覆蓋或添加（資料庫數據優先，並去重）
       if (userStocksFromDB.length > 0) {
-        // #region agent log
-        const duplicateSymbols = userStocksFromDB.filter((stock, index, arr) => arr.findIndex(s => s.symbol === stock.symbol) !== index).map(s => s.symbol);
-        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:625',message:'Before adding userStocksFromDB',data:{userStocksFromDBCount:userStocksFromDB.length,duplicateSymbols:duplicateSymbols},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
-        
+        // 先對 userStocksFromDB 去重（保留最後一個）
+        const uniqueUserStocks = new Map<string, Stock>();
         userStocksFromDB.forEach((dbStock: Stock) => {
-          stocksMap.set(dbStock.symbol, dbStock);
+          uniqueUserStocks.set(dbStock.symbol, dbStock);
+        });
+        
+        // 添加到主 Map
+        uniqueUserStocks.forEach((stock, symbol) => {
+          stocksMap.set(symbol, stock);
         });
       }
       
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:630',message:'After adding userStocksFromDB',data:{stocksMapSize:stocksMap.size},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
-      
       // 3. 添加查詢到的股票（如果不存在）
       if (queriedStocks.length > 0) {
-        // #region agent log
-        const duplicateQueried = queriedStocks.filter((stock, index, arr) => arr.findIndex(s => s.symbol === stock.symbol) !== index).map(s => s.symbol);
-        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:633',message:'Before adding queriedStocks',data:{queriedStocksCount:queriedStocks.length,duplicateQueried:duplicateQueried},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
-        
+        // 先對 queriedStocks 去重（保留最後一個）
+        const uniqueQueriedStocks = new Map<string, Stock>();
         queriedStocks.forEach((queriedStock) => {
-          if (!stocksMap.has(queriedStock.symbol)) {
-            stocksMap.set(queriedStock.symbol, queriedStock);
+          uniqueQueriedStocks.set(queriedStock.symbol, queriedStock);
+        });
+        
+        // 添加到主 Map（如果不存在）
+        uniqueQueriedStocks.forEach((stock, symbol) => {
+          if (!stocksMap.has(symbol)) {
+            stocksMap.set(symbol, stock);
           }
         });
       }
       
-      // 轉換 Map 為陣列
+      // 轉換 Map 為陣列（此時已確保無重複）
       let stocks = Array.from(stocksMap.values());
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:640',message:'After Map to array conversion',data:{stocksCount:stocks.length,stocksSymbols:stocks.map(s => s.symbol)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
 
     // 過濾掉隱藏的股票
     stocks = stocks.filter((stock) => !hiddenStocks.has(stock.symbol));
@@ -803,19 +778,12 @@ function App() {
     }
 
     // 最終去重：確保沒有重複的股票代碼（以防萬一）
+    // 使用 Map 確保每個股票代碼只出現一次（保留最後一個）
     const finalStocksMap = new Map<string, Stock>();
     stocks.forEach((stock) => {
-      // 如果已存在，保留第一個（保持穩定性）
-      if (!finalStocksMap.has(stock.symbol)) {
-        finalStocksMap.set(stock.symbol, stock);
-      }
+      finalStocksMap.set(stock.symbol, stock);
     });
     stocks = Array.from(finalStocksMap.values());
-    
-    // #region agent log
-    const duplicateSymbolsFinal = stocks.filter((stock, index, arr) => arr.findIndex(s => s.symbol === stock.symbol) !== index).map(s => s.symbol);
-    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:775',message:'Final deduplication result',data:{finalStocksCount:stocks.length,duplicateSymbolsFinal:duplicateSymbolsFinal,allSymbols:stocks.map(s => s.symbol)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
 
       return stocks;
     } catch (error) {
