@@ -98,13 +98,24 @@ export function Header({
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Header.tsx:99',message:'handleSearchSubmit called',data:{searchQuery:searchQuery.trim(),hasOnSearchSubmit:!!onSearchSubmit},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
     if (!searchQuery.trim()) {
       setShowSearch(false);
       return;
     }
     // 觸發父組件的搜尋函數
     if (onSearchSubmit) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Header.tsx:107',message:'Calling onSearchSubmit',data:{searchQuery:searchQuery.trim()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       onSearchSubmit();
+    } else {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Header.tsx:110',message:'onSearchSubmit is not provided',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
     }
   };
 
