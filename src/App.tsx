@@ -268,8 +268,15 @@ function App() {
 
   // 處理搜尋按鈕點擊或 Enter 鍵觸發
   const handleSearchSubmit = async () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:270',message:'handleSearchSubmit called',data:{searchQuery:searchQuery.trim()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
     const query = searchQuery.trim();
     if (!query) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:274',message:'Query is empty, returning early',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
       return;
     }
 
@@ -281,17 +288,33 @@ function App() {
     setIsSearching(true);
     setSearchError(null);
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:285',message:'Starting queryStock',data:{query:query},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+
     try {
       const result = await queryStock(query, mockStocks, true);
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:289',message:'queryStock result',data:{found:result.found,hasStock:!!result.stock,error:result.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       
       if (result.found && result.stock) {
         // 添加到查詢結果列表
         setQueriedStocks([result.stock]);
         // 添加到搜索歷史（addToSearchHistory 內部已有去重邏輯）
         addToSearchHistory(query);
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:293',message:'Stock found and added to queriedStocks',data:{symbol:result.stock.symbol,name:result.stock.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
       } else {
         setSearchError(result.error || '找不到該股票');
         setQueriedStocks([]);
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:297',message:'Stock not found',data:{error:result.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
       }
     } catch (error) {
       // 只在開發環境中輸出詳細錯誤
@@ -300,8 +323,16 @@ function App() {
       }
       setSearchError('查詢失敗，請稍後再試');
       setQueriedStocks([]);
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:304',message:'Query error',data:{error:error instanceof Error ? error.message : String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
     } finally {
       setIsSearching(false);
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:310',message:'handleSearchSubmit finished',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
     }
   };
 
@@ -347,19 +378,19 @@ function App() {
         // 設置資料庫股票（會自動顯示在股票清單中）
         setUserStocksFromDB(stocks);
         
-        // 清空臨時查詢結果（queriedStocks），因為資料庫已有記錄
-        setQueriedStocks([]);
+        // 注意：不清空 queriedStocks，允許用戶搜尋結果與資料庫股票共存
+        // 只有在登入時才清空（在 handleLoginSuccess 中處理）
         
         if (import.meta.env.DEV) {
-          console.log(`成功載入 ${stocks.length} 筆股票記錄，已清空臨時查詢結果`);
+          console.log(`成功載入 ${stocks.length} 筆股票記錄`);
         }
       } else {
-        // 資料庫沒有股票記錄：清空資料庫股票和臨時查詢結果
+        // 資料庫沒有股票記錄：清空資料庫股票
+        // 注意：不清空 queriedStocks，允許用戶搜尋
         setUserStocksFromDB([]);
-        setQueriedStocks([]);
         
         if (import.meta.env.DEV) {
-          console.log('資料庫沒有股票記錄，已清空股票清單');
+          console.log('資料庫沒有股票記錄');
         }
       }
     } catch (error) {
@@ -435,6 +466,9 @@ function App() {
       console.error('保存用戶資訊失敗:', error);
     }
     setIsLoginModalOpen(false);
+    
+    // 登入時清空搜尋結果，準備載入資料庫股票
+    setQueriedStocks([]);
     
     // 載入用戶的股票記錄
     await loadUserStocksFromDB(userId);
@@ -629,7 +663,7 @@ function App() {
         });
       }
       
-      // 3. 添加查詢到的股票（如果不存在）
+      // 3. 添加查詢到的股票（優先顯示搜尋結果，覆蓋已存在的股票）
       if (queriedStocks.length > 0) {
         // 先對 queriedStocks 去重（保留最後一個）
         const uniqueQueriedStocks = new Map<string, Stock>();
@@ -637,11 +671,9 @@ function App() {
           uniqueQueriedStocks.set(queriedStock.symbol, queriedStock);
         });
         
-        // 添加到主 Map（如果不存在）
+        // 添加到主 Map（搜尋結果優先，覆蓋已存在的股票）
         uniqueQueriedStocks.forEach((stock, symbol) => {
-          if (!stocksMap.has(symbol)) {
-            stocksMap.set(symbol, stock);
-          }
+          stocksMap.set(symbol, stock);
         });
       }
       
