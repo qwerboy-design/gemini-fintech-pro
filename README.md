@@ -200,13 +200,16 @@ graph TB
         H[stockService<br/>股票查詢服務]
         I[gasService<br/>Google Apps Script 服務]
         J[geminiService<br/>Gemini API 服務]
+        FM[finmindService<br/>FinMind API 服務]
+        FH[finnhubService<br/>Finnhub API 服務]
     end
     
     subgraph "外部服務"
         K[Google Gemini API<br/>gemini-2.5-flash]
         L[Google Search Grounding<br/>即時資訊獲取]
         M[Google Apps Script<br/>Web App]
-        N[外部股票 API<br/>可選]
+        FM_API[FinMind API<br/>台股價格]
+        FH_API[Finnhub API<br/>Fear & Greed Index]
     end
     
     subgraph "數據存儲"
@@ -225,11 +228,15 @@ graph TB
     B --> I
     G --> J
     E --> I
+    A --> FM
+    A --> FH
     
-    H --> N
+    H --> FM_API
     I --> M
     J --> K
     K --> L
+    FM --> FM_API
+    FH --> FH_API
     
     M --> P
     
@@ -431,6 +438,8 @@ graph TD
     A -.服務層.-> H[stockService]
     A -.服務層.-> I[gasService]
     A -.服務層.-> J[geminiService]
+    A -.服務層.-> FM[finmindService]
+    A -.服務層.-> FH[finnhubService]
     
     style A fill:#8b5cf6
     style G fill:#8b5cf6
@@ -440,6 +449,8 @@ graph TD
     style H fill:#10b981
     style I fill:#10b981
     style J fill:#10b981
+    style FM fill:#10b981
+    style FH fill:#10b981
 ```
 
 ---
@@ -736,6 +747,25 @@ gemini-fintech-pro/
 - **優先級 2**: 外部 API（taiwanstock.online, FinMind 等）
 - **Fallback**: 模擬數據生成
 
+#### FinMind API（台股價格）
+
+- **端點**: `https://api.finmindtrade.com/api/v4/data`
+- **數據集**: `TaiwanStockPrice`（日線資料，不需要贊助會員）
+- **功能**: 獲取台股收盤價、開盤價、成交量等資訊
+- **更新頻率**: 每 30 秒自動更新股票清單和收藏股票的價格
+- **查詢範圍**: 只查詢股票清單（mockStocks + userStocksFromDB）和收藏的股票
+- **價格應用**: 在所有策略下都應用 API 獲取的價格，確保顯示最新數據
+- **API Key**: 從環境變數 `VITE_FINMIND_API_KEY` 讀取
+- **詳細說明**: 請參考 [`STOCK_PRICE_UPDATE_IMPROVEMENT.md`](./STOCK_PRICE_UPDATE_IMPROVEMENT.md)
+
+#### Finnhub API（Fear and Greed Index）
+
+- **端點**: `https://finnhub.io/api/v1/forex/fear-greed`（注意：此端點可能不存在，需要確認）
+- **功能**: 獲取市場情緒指數（Fear and Greed Index）
+- **更新頻率**: 每 5 分鐘自動更新一次
+- **API Key**: 從環境變數 `VITE_FINNHUB_API_KEY` 讀取
+- **狀態**: ⚠️ 目前端點返回 HTML 而非 JSON，需要確認正確的 API 端點
+
 #### Google Apps Script API
 
 - **端點**: 從環境變數 `VITE_GAS_URL` 讀取
@@ -856,6 +886,7 @@ npm run lint
 - [`BUTTON_FEATURES.md`](./BUTTON_FEATURES.md): 按鈕功能實現
 - [`LOGIN_FEATURE_IMPLEMENTATION.md`](./LOGIN_FEATURE_IMPLEMENTATION.md): 登入功能實現
 - [`STOCK_SEARCH_API.md`](./STOCK_SEARCH_API.md): 股票查詢 API 實現
+- [`STOCK_PRICE_UPDATE_IMPROVEMENT.md`](./STOCK_PRICE_UPDATE_IMPROVEMENT.md): **股票價格更新功能改善文檔**（推薦閱讀）
 
 ### 安全與最佳實踐
 
@@ -1008,6 +1039,6 @@ npm run preview
 
 ---
 
-**最後更新**: 2025-12-18  
-**版本**: 1.0.0  
+**最後更新**: 2025-01-XX  
+**版本**: 1.1.0  
 **狀態**: ✅ 生產就緒
