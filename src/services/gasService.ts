@@ -197,21 +197,39 @@ export async function submitLoginToGAS(
  * @param url Google Apps Script Web App URL
  * @param userId 用戶 ID
  * @param stock 股票資料
- * @returns API 響應
+ * @returns API 響應（不會拋出錯誤，總是返回結果對象）
  */
 export async function saveStockToGAS(
   url: string,
   userId: string,
   stock: StockData
 ): Promise<GasResponse> {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:saveStockToGAS:entry',message:'Function entry',data:{url,userId,stockSymbol:stock.symbol},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
+
   try {
+    // 參數驗證
+    if (!url || !userId || !stock || !stock.symbol) {
+      const errorMsg = !url ? 'GAS URL 未配置' : !userId ? '用戶 ID 未提供' : '股票資料不完整';
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:saveStockToGAS:validation',message:'Parameter validation failed',data:{error:errorMsg},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      return { success: false, message: errorMsg };
+    }
+
     const requestBody = JSON.stringify({
       action: 'saveStock',
       userId,
       stock,
     } as SaveStockRequest);
 
-    let response: Response;
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:saveStockToGAS:before-fetch',message:'Before fetch request',data:{requestBody},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+
+    let response: Response | null = null;
+    let fetchError: unknown = null;
 
     // 策略 1: 完全不設置 Content-Type header（最簡單的請求）
     try {
@@ -220,45 +238,166 @@ export async function saveStockToGAS(
         body: requestBody,
         mode: 'cors',
       });
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:saveStockToGAS:fetch-strategy1',message:'Fetch strategy 1 result',data:{ok:response.ok,status:response.status,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+
+      if (response.ok) {
+        fetchError = null;
+      } else if (response.status === 0) {
+        // 狀態碼 0 通常表示 CORS 錯誤或網絡錯誤
+        fetchError = new Error('CORS error or network error');
+        response = null;
+      }
     } catch (firstError) {
-      // 策略 2: 使用 text/plain Content-Type（如果方法 1 失敗）
-      response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
-        },
-        body: requestBody,
-        mode: 'cors',
-      });
+      fetchError = firstError;
+      response = null;
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:saveStockToGAS:fetch-strategy1-error',message:'Fetch strategy 1 error',data:{error:firstError instanceof Error ? firstError.message : String(firstError)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
     }
 
+    // 策略 2: 使用 text/plain Content-Type（如果方法 1 失敗）
+    if (!response || fetchError) {
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8',
+          },
+          body: requestBody,
+          mode: 'cors',
+        });
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:saveStockToGAS:fetch-strategy2',message:'Fetch strategy 2 result',data:{ok:response.ok,status:response.status,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
+
+        fetchError = null;
+      } catch (secondError) {
+        // 兩種方法都失敗
+        const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError || '無法獲取響應');
+        const secondErrorMessage = secondError instanceof Error ? secondError.message : String(secondError);
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:saveStockToGAS:fetch-both-failed',message:'Both fetch strategies failed',data:{firstError:errorMessage,secondError:secondErrorMessage},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+        // #endregion
+
+        if (errorMessage.includes('Failed to fetch') || 
+            errorMessage.includes('CORS') ||
+            errorMessage.includes('blocked') ||
+            secondErrorMessage.includes('Failed to fetch') || 
+            secondErrorMessage.includes('CORS') ||
+            secondErrorMessage.includes('blocked') ||
+            fetchError instanceof TypeError ||
+            secondError instanceof TypeError) {
+          return {
+            success: false,
+            message: '無法連接到 Google Apps Script（CORS 錯誤）。\n\n請確認以下設置：\n1. ✓ 前往 Google Apps Script 編輯器\n2. ✓ 點擊「部署」→「管理部署」\n3. ✓ 編輯部署，設置「具有存取權的使用者」為「任何人」\n4. ✓ 點擊「重新部署」\n\n詳細說明請參考：CORS_QUICK_FIX.md 或 LOGIN_TROUBLESHOOTING.md'
+          };
+        }
+        
+        return {
+          success: false,
+          message: `網絡請求失敗: ${secondErrorMessage || errorMessage || '未知錯誤'}`
+        };
+      }
+    }
+
+    if (!response) {
+      return {
+        success: false,
+        message: '無法獲取伺服器響應'
+      };
+    }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:saveStockToGAS:before-response-check',message:'Before response.ok check',data:{ok:response.ok,status:response.status,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
+    // #endregion
+
     if (!response.ok) {
-      const errorText = await response.text();
+      let errorText = '';
+      try {
+        errorText = await response.text();
+      } catch (textError) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:saveStockToGAS:response-text-error',message:'Failed to read response text',data:{error:textError instanceof Error ? textError.message : String(textError)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
+        // #endregion
+      }
+
       let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
 
       try {
-        const errorJson = JSON.parse(errorText);
-        errorMessage = errorJson.message || errorMessage;
+        if (errorText) {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.message || errorMessage;
+        }
       } catch {
-        errorMessage = errorText || errorMessage;
+        if (errorText) {
+          errorMessage = errorText || errorMessage;
+        }
       }
 
-      throw new Error(errorMessage);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:saveStockToGAS:response-not-ok',message:'Response not ok',data:{status:response.status,statusText:response.statusText,errorMessage},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
+      // #endregion
+
+      return {
+        success: false,
+        message: errorMessage
+      };
     }
 
     const responseText = await response.text();
     
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:saveStockToGAS:before-parse',message:'Before JSON parse',data:{responseTextLength:responseText.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'K'})}).catch(()=>{});
+    // #endregion
+
     let result: GasResponse;
     try {
       result = JSON.parse(responseText) as GasResponse;
     } catch (parseError) {
-      throw new Error('無法解析伺服器響應: ' + String(parseError));
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:saveStockToGAS:parse-error',message:'JSON parse error',data:{error:parseError instanceof Error ? parseError.message : String(parseError),responseText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'L'})}).catch(()=>{});
+      // #endregion
+      return {
+        success: false,
+        message: `無法解析伺服器響應: ${parseError instanceof Error ? parseError.message : String(parseError)}`
+      };
     }
-    
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:saveStockToGAS:before-success-check',message:'Before success check',data:{success:result.success,message:result.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'M'})}).catch(()=>{});
+    // #endregion
+
+    // 檢查後端返回的 success 標誌
+    if (!result.success) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:saveStockToGAS:backend-failure',message:'Backend returned success=false',data:{message:result.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'N'})}).catch(()=>{});
+      // #endregion
+      return {
+        success: false,
+        message: result.message || '寫入失敗：伺服器返回錯誤'
+      };
+    }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:saveStockToGAS:success',message:'Function success',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'O'})}).catch(()=>{});
+    // #endregion
+
     return result;
   } catch (error) {
-    console.error('GAS API 錯誤 (saveStock):', error);
-    throw error;
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gasService.ts:saveStockToGAS:catch',message:'Unexpected error in catch block',data:{error:error instanceof Error ? error.message : String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'P'})}).catch(()=>{});
+    // #endregion
+    console.error('❌ saveStockToGAS 錯誤:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : '未知錯誤'
+    };
   }
 }
 
@@ -411,6 +550,7 @@ export async function testGASConnection(url: string): Promise<boolean> {
     return false;
   }
 }
+
 
 
 
