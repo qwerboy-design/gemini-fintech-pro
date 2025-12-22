@@ -92,18 +92,15 @@ export function MarketSentiment({ sentiment }: MarketSentimentProps) {
     });
   }
 
-  // 計算指針三角形頂點（在 -90 度時計算，然後通過 transform 旋轉）
-  // 指針頂點（指向外圓，從上方 -90 度開始）
-  const pointerTip = polarToCartesian(centerX, centerY, outerRadius - 3, -90);
-  // 指針底部兩個點（形成三角形底邊，調整位置避免被中央文字遮擋）
-  const baseOffset = 8; // 三角形底邊寬度的一半（角度）
-  // 將指針底部稍微向外移動，避免與中央顯示區域重疊
-  const pointerBaseRadius = innerRadius + 8; // 從 innerRadius + 5 改為 innerRadius + 8
-  const pointerBase1 = polarToCartesian(centerX, centerY, pointerBaseRadius, -90 - baseOffset);
-  const pointerBase2 = polarToCartesian(centerX, centerY, pointerBaseRadius, -90 + baseOffset);
-
   // 計算指針應該旋轉的角度（與 currentAngle 同步）
   const pointerRotationAngle = currentAngle;
+  
+  // 指針參數：使用簡單的線條和圓點設計（參考 HTML 範例）
+  // 指針從中心點 (centerX, centerY) 指向外圓
+  // 指針長度：從中心到外圓的距離
+  const pointerLength = outerRadius - 3; // 稍微短一點，避免與邊緣重疊
+  // 指針終點（在 -90 度時，指針向上）
+  const pointerEndY = centerY - pointerLength;
 
   // 動畫效果：組件載入或數值更新時觸發，確保指針與數值同步
   useEffect(() => {
@@ -125,7 +122,7 @@ export function MarketSentiment({ sentiment }: MarketSentimentProps) {
         });
       }
     }
-  }, [sentiment.index, startAngle, endAngle, currentAngle]);
+  }, [sentiment.index, startAngle, endAngle, currentAngle, centerX, centerY, pointerLength]);
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 sm:p-4">
@@ -169,7 +166,7 @@ export function MarketSentiment({ sentiment }: MarketSentimentProps) {
             );
           })}
 
-          {/* 灰色三角形指針 - 在中央文字之前渲染，確保指針在文字下方 */}
+          {/* 指針 - 使用簡單的線條和圓點設計（參考 HTML 範例修正） */}
           {/* 注意：指針的 transform 由 useEffect 控制，確保與 roundedIndex 同步 */}
           {/* 初始 transform 設置為正確角度，避免初始渲染不同步 */}
           <g
@@ -180,12 +177,22 @@ export function MarketSentiment({ sentiment }: MarketSentimentProps) {
               transition: 'transform 1s cubic-bezier(0.4, 0, 0.2, 1)',
             }}
           >
-            <polygon
-              points={`${pointerTip.x},${pointerTip.y} ${pointerBase1.x},${pointerBase1.y} ${pointerBase2.x},${pointerBase2.y}`}
-              fill="#6b7280"
-              stroke="#4b5563"
-              strokeWidth="0.5"
-              className="opacity-95"
+            {/* 指針線：從中心點指向外圓 */}
+            <line
+              x1={centerX}
+              y1={centerY}
+              x2={centerX}
+              y2={pointerEndY}
+              stroke="#ffffff"
+              strokeWidth="3"
+              strokeLinecap="round"
+            />
+            {/* 中心圓點 */}
+            <circle
+              cx={centerX}
+              cy={centerY}
+              r="5"
+              fill="#ffffff"
             />
           </g>
 
