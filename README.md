@@ -2,6 +2,12 @@
 
 **一個現代化的股票資訊管理系統，整合 AI 分析和用戶登入功能**
 
+> **最新更新 (2025-12-22)**: 
+> - ✅ 優化 API 請求邏輯：實現批次處理和速率限制，避免觸發 402 錯誤
+> - ✅ Fear & Greed Index：整合 CNN API，修復指針同步問題，顯示整數值
+> - ✅ 收藏同步：修復首頁星號與資料庫股票清單的同步問題
+> - ✅ 錯誤處理：改進 gasService 錯誤處理，提供更清晰的錯誤訊息
+
 ---
 
 ## 📋 目錄
@@ -116,9 +122,13 @@ Gemini FinTech Pro 是一個基於 React + TypeScript 構建的現代化股票�
 
 ### 4. 市場情緒分析
 
-- ✅ 市場情緒指數顯示
+- ✅ 市場情緒指數顯示（Fear & Greed Index）
 - ✅ 視覺化情緒等級（極度恐慌、恐慌、中性、貪婪、極度貪婪）
-- ✅ 使用 Recharts 顯示圖表
+- ✅ 圓形儀表盤設計，五個顏色分明的扇形區域
+- ✅ 指針同步顯示，自動指向對應的指數位置
+- ✅ 指數值顯示為整數，確保指針與數值完全同步
+- ✅ 優先使用 CNN API 獲取最新數據，fallback 到 Finnhub API
+- ✅ 每 5 分鐘自動更新一次
 
 ### 5. 用戶登入系統
 
@@ -141,6 +151,9 @@ Gemini FinTech Pro 是一個基於 React + TypeScript 構建的現代化股票�
 - ✅ 從資料庫刪除股票（deleteStockFromGAS）
 - ✅ 獲取用戶股票列表（getUserStocksFromGAS）
 - ✅ 每 30 秒自動刷新資料庫股票清單
+- ✅ 收藏狀態自動同步：從資料庫載入的股票自動加入收藏
+- ✅ 取消收藏時同步刪除資料庫記錄
+- ✅ 首頁星號數量與資料庫股票清單星號狀態完全同步
 
 ### 6. UI/UX 功能
 
@@ -626,11 +639,11 @@ gemini-fintech-pro/
 │   ├── data/                       # 數據文件
 │   │   └── mockStocks.ts           # 模擬股票數據
 │   ├── services/                   # 服務層
-│   │   ├── gasService.ts           # Google Apps Script 服務
+│   │   ├── gasService.ts           # Google Apps Script 服務（改進錯誤處理）
 │   │   ├── stockService.ts         # 股票查詢服務
 │   │   ├── geminiService.ts        # Gemini API 服務
-│   │   ├── finmindService.ts       # FinMind API 服務（台股價格）
-│   │   └── finnhubService.ts       # Finnhub API 服務（Fear & Greed Index）
+│   │   ├── finmindService.ts       # FinMind API 服務（台股價格，批次處理優化）
+│   │   └── finnhubService.ts       # Fear & Greed Index 服務（CNN API + Finnhub fallback）
 │   ├── types/                      # TypeScript 類型定義
 │   │   └── stock.ts                # 股票相關類型
 │   ├── App.tsx                     # 主應用組件
@@ -689,6 +702,10 @@ gemini-fintech-pro/
 - ✅ 捕獲特定異常類型，避免 bare `catch`
 - ✅ 提供友好的錯誤訊息給用戶
 - ✅ 記錄錯誤到控制台（開發環境）
+- ✅ **gasService 錯誤處理**: 不拋出錯誤，返回結構化結果，提供清晰的錯誤分類（網絡、CORS、解析、後端錯誤）
+- ✅ **API 速率限制處理**: 自動處理 402（IP 封鎖）和 429（速率限制）錯誤
+- ✅ **指數退避重試**: 實現智能重試策略，避免過度請求
+- ✅ **批次處理錯誤恢復**: 即使部分請求失敗，其他請求仍可繼續
 
 ### 性能優化
 
@@ -697,6 +714,11 @@ gemini-fintech-pro/
 - ✅ 列表渲染使用唯一的 `key`
 - ✅ Debounce 搜索輸入（800ms）
 - ✅ 避免在渲染中進行昂貴計算
+- ✅ **API 請求批次處理**: 將大量請求分成小批次（每批 5 個），批次之間延遲 500ms
+- ✅ **速率限制**: 降低自動更新頻率從 30 秒到 60 秒，避免觸發 API 402 錯誤
+- ✅ **智能延遲**: 頁面載入後延遲 2 秒再首次更新，避免立即發送大量請求
+- ✅ **錯誤重試**: 實現指數退避重試策略，自動處理 402/429 錯誤
+- ✅ **請求去重**: 自動去除重複的股票代碼，避免重複請求
 
 ---
 
@@ -754,19 +776,25 @@ gemini-fintech-pro/
 - **端點**: `https://api.finmindtrade.com/api/v4/data`
 - **數據集**: `TaiwanStockPrice`（日線資料，不需要贊助會員）
 - **功能**: 獲取台股收盤價、開盤價、成交量等資訊
-- **更新頻率**: 每 30 秒自動更新股票清單和收藏股票的價格
+- **更新頻率**: 每 60 秒自動更新股票清單和收藏股票的價格（優化後降低頻率）
 - **查詢範圍**: 只查詢股票清單（mockStocks + userStocksFromDB）和收藏的股票
 - **價格應用**: 在所有策略下都應用 API 獲取的價格，確保顯示最新數據
 - **API Key**: 從環境變數 `VITE_FINMIND_API_KEY` 讀取
+- **批次處理**: 將請求分成小批次（每批 5 個股票），批次之間延遲 500ms，避免觸發 API 402 錯誤
+- **錯誤處理**: 自動處理 402（IP 封鎖）和 429（速率限制）錯誤，實現指數退避重試策略
+- **首次更新延遲**: 頁面載入後延遲 2 秒再更新，避免立即發送大量請求
 - **詳細說明**: 請參考 [`STOCK_PRICE_UPDATE_IMPROVEMENT.md`](./STOCK_PRICE_UPDATE_IMPROVEMENT.md)
 
-#### Finnhub API（Fear and Greed Index）
+#### Fear and Greed Index API
 
-- **端點**: `https://finnhub.io/api/v1/forex/fear-greed`（注意：此端點可能不存在，需要確認）
+- **優先端點**: `https://production.dataviz.cnn.io/index/fearandgreed/graphdata`（CNN API）
+- **Fallback 端點**: `https://finnhub.io/api/v1/forex/fear-greed`（Finnhub API）
 - **功能**: 獲取市場情緒指數（Fear and Greed Index）
+- **數據格式**: CNN API 返回 `fear_and_greed_historical.data` 數組，取最後一個數據點的 `y` 值
 - **更新頻率**: 每 5 分鐘自動更新一次
-- **API Key**: 從環境變數 `VITE_FINNHUB_API_KEY` 讀取
-- **狀態**: ⚠️ 目前端點返回 HTML 而非 JSON，需要確認正確的 API 端點
+- **指數顯示**: 顯示為整數（0-100），指針自動同步指向對應位置
+- **API Key**: Finnhub API 從環境變數 `VITE_FINNHUB_API_KEY` 讀取（CNN API 不需要）
+- **錯誤處理**: 自動處理 CORS 錯誤和 bot 檢測，失敗時自動 fallback 到 Finnhub API
 
 #### Google Apps Script API
 
@@ -785,6 +813,11 @@ gemini-fintech-pro/
   - `saveStock`: 保存股票到資料庫
   - `deleteStock`: 從資料庫刪除股票
   - `getUserStocks`: 獲取用戶股票列表
+- **錯誤處理**: 
+  - 不拋出錯誤，返回 `{ success: boolean, message?: string }` 結構
+  - 自動處理 CORS 錯誤，提供詳細的解決步驟
+  - 檢查 `response.ok` 和 `data.success`，提供清晰的錯誤訊息
+  - 處理網絡錯誤、解析錯誤、後端業務錯誤等各種情況
 
 #### Google Gemini API
 
@@ -944,9 +977,9 @@ npm run preview
 
 ### 代碼統計
 
-- **組件數量**: 6 個主要組件（新增 AIDailyReport）
-- **服務數量**: 3 個服務（stockService, gasService, geminiService）
-- **類型定義**: 3 個主要 interface
+- **組件數量**: 6 個主要組件（Header, StockTable, StrategyButtons, MarketSentiment, LoginModal, AIDailyReport）
+- **服務數量**: 5 個服務（stockService, gasService, geminiService, finmindService, finnhubService）
+- **類型定義**: 3 個主要 interface（Stock, MarketSentiment, StockQueryResult）
 - **模擬數據**: 8+ 支股票數據
 
 ---
@@ -955,6 +988,9 @@ npm run preview
 
 ### 短期改進
 
+- [x] ✅ **API 請求優化**: 實現批次處理和速率限制，避免觸發 API 402 錯誤（已完成）
+- [x] ✅ **Fear & Greed Index 優化**: 整合 CNN API，實現指針同步和整數顯示（已完成）
+- [x] ✅ **收藏同步優化**: 修復首頁星號與資料庫股票清單的同步問題（已完成）
 - [ ] 優化策略過濾邏輯（更複雜的條件）
 - [ ] 添加更多排序選項
 - [ ] 改善搜索算法
