@@ -97,8 +97,8 @@ async function getFearGreedIndexFromCNN(): Promise<MarketSentiment | null> {
       const latestData = data.fear_and_greed_historical.data[data.fear_and_greed_historical.data.length - 1];
       const index = latestData.y;
 
-      // 確保指數在 0-100 範圍內
-      const normalizedIndex = Math.max(0, Math.min(100, index));
+      // 確保指數在 0-100 範圍內，並四捨五入為整數
+      const normalizedIndex = Math.round(Math.max(0, Math.min(100, index)));
 
       // 計算情緒等級和顏色
       const { level, color } = calculateSentimentLevel(normalizedIndex);
@@ -177,7 +177,8 @@ async function getFearGreedIndexFromFinnhub(): Promise<MarketSentiment | null> {
       return null;
     }
 
-    const normalizedIndex = Math.max(0, Math.min(100, index));
+    // 確保指數在 0-100 範圍內，並四捨五入為整數
+    const normalizedIndex = Math.round(Math.max(0, Math.min(100, index)));
     const { level, color } = calculateSentimentLevel(normalizedIndex);
 
     return {

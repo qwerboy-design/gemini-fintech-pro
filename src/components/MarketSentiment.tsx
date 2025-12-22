@@ -102,7 +102,10 @@ export function MarketSentiment({ sentiment }: MarketSentimentProps) {
   const pointerBase1 = polarToCartesian(centerX, centerY, pointerBaseRadius, -90 - baseOffset);
   const pointerBase2 = polarToCartesian(centerX, centerY, pointerBaseRadius, -90 + baseOffset);
 
-  // 動畫效果：組件載入時觸發，確保指針與數值同步
+  // 計算指針應該旋轉的角度（與 currentAngle 同步）
+  const pointerRotationAngle = currentAngle;
+
+  // 動畫效果：組件載入或數值更新時觸發，確保指針與數值同步
   useEffect(() => {
     if (pointerRef.current) {
       // 使用與渲染時相同的 roundedIndex 和 currentAngle，確保完全同步
@@ -122,7 +125,7 @@ export function MarketSentiment({ sentiment }: MarketSentimentProps) {
         });
       }
     }
-  }, [sentiment.index, startAngle, endAngle]);
+  }, [sentiment.index, startAngle, endAngle, currentAngle]);
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 sm:p-4">
@@ -168,11 +171,13 @@ export function MarketSentiment({ sentiment }: MarketSentimentProps) {
 
           {/* 灰色三角形指針 - 在中央文字之前渲染，確保指針在文字下方 */}
           {/* 注意：指針的 transform 由 useEffect 控制，確保與 roundedIndex 同步 */}
+          {/* 初始 transform 設置為正確角度，避免初始渲染不同步 */}
           <g
             ref={pointerRef}
             style={{
               transformOrigin: `${centerX}px ${centerY}px`,
-              // transform 由 useEffect 動態設置，不在此處設置初始值
+              transform: `rotate(${pointerRotationAngle}deg)`,
+              transition: 'transform 1s cubic-bezier(0.4, 0, 0.2, 1)',
             }}
           >
             <polygon
