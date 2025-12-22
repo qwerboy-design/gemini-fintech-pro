@@ -102,13 +102,24 @@ export async function getStockQuote(symbol: string): Promise<Stock | null> {
         return null;
       }
       
-      // 處理速率限制
+      // 處理速率限制（429 Too Many Requests）
       if (response.status === 429) {
         // #region agent log
         fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'finmindService.ts:87',message:'API rate limit',data:{symbol,status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
         // #endregion
-        console.warn('FinMind API 速率限制，請稍後再試');
-        return null;
+        console.warn('FinMind API 速率限制（429），請稍後再試');
+        // 拋出錯誤以便上層處理重試
+        throw new Error('API rate limit 429');
+      }
+      
+      // 處理 IP 封鎖（402 Payment Required）
+      if (response.status === 402) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'finmindService.ts:402',message:'API IP blocked',data:{symbol,status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
+        console.warn('FinMind API IP 被封鎖（402），請求過於頻繁');
+        // 拋出錯誤以便上層處理重試
+        throw new Error('API IP blocked 402');
       }
 
       // #region agent log
@@ -209,29 +220,119 @@ export async function getStockQuotes(symbols: string[]): Promise<Map<string, Sto
     return result;
   }
 
-  // 多個股票時，使用並行單一查詢
+  // 多個股票時，使用批次處理（避免觸發 API 402 錯誤）
   return await getStockQuotesParallel(uniqueSymbols);
 }
 
 /**
- * 並行獲取多個股票報價（fallback 方法）
+ * 批次處理延遲函數
+ * 
+ * @param ms 延遲毫秒數
+ */
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * 批次獲取多個股票報價（優化版本，避免觸發 API 402 錯誤）
+ * 
+ * 策略：
+ * 1. 將請求分成小批次（每批 5 個股票）
+ * 2. 批次之間添加延遲（500ms）
+ * 3. 批次內並行請求，但限制並發數量
+ * 4. 處理 402 錯誤並實現退避策略
  * 
  * @param symbols 股票代碼陣列
  * @returns Map<symbol, Stock>
  */
 async function getStockQuotesParallel(symbols: string[]): Promise<Map<string, Stock>> {
-  const results = await Promise.allSettled(
-    symbols.map(symbol => getStockQuote(symbol))
-  );
-
+  const BATCH_SIZE = 5; // 每批處理 5 個股票
+  const BATCH_DELAY = 500; // 批次之間延遲 500ms
+  const MAX_RETRIES = 2; // 最大重試次數
+  const RETRY_DELAY = 2000; // 重試延遲 2 秒
+  
   const resultMap = new Map<string, Stock>();
   
-  results.forEach((result, index) => {
-    if (result.status === 'fulfilled' && result.value) {
-      resultMap.set(symbols[index], result.value);
+  // 將股票代碼分成批次
+  const batches: string[][] = [];
+  for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
+    batches.push(symbols.slice(i, i + BATCH_SIZE));
+  }
+  
+  if (import.meta.env.DEV) {
+    console.log(`將 ${symbols.length} 個股票分成 ${batches.length} 批次處理，每批 ${BATCH_SIZE} 個`);
+  }
+  
+  // 逐批次處理
+  for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+    const batch = batches[batchIndex];
+    
+    // 批次內並行請求
+    const batchResults = await Promise.allSettled(
+      batch.map(async (symbol) => {
+        let retries = 0;
+        let lastError: Error | null = null;
+        
+        // 重試邏輯
+        while (retries <= MAX_RETRIES) {
+          try {
+            const stock = await getStockQuote(symbol);
+            if (stock) {
+              return { symbol, stock };
+            }
+            // 如果返回 null，可能是 API 錯誤，但不拋出異常
+            return null;
+          } catch (error) {
+            lastError = error instanceof Error ? error : new Error(String(error));
+            
+            // 檢查是否是 402 錯誤（Payment Required / IP Blocked）
+            if (error instanceof Error && error.message.includes('402')) {
+              if (retries < MAX_RETRIES) {
+                const delayMs = RETRY_DELAY * (retries + 1); // 指數退避
+                if (import.meta.env.DEV) {
+                  console.warn(`股票 ${symbol} 請求被限制（402），${delayMs}ms 後重試 (${retries + 1}/${MAX_RETRIES})`);
+                }
+                await delay(delayMs);
+                retries++;
+                continue;
+              } else {
+                if (import.meta.env.DEV) {
+                  console.error(`股票 ${symbol} 請求失敗：已達最大重試次數，可能 IP 被封鎖`);
+                }
+                return null;
+              }
+            }
+            
+            // 其他錯誤，不重試
+            if (import.meta.env.DEV) {
+              console.warn(`股票 ${symbol} 請求失敗:`, lastError.message);
+            }
+            return null;
+          }
+        }
+        
+        return null;
+      })
+    );
+    
+    // 處理批次結果
+    batchResults.forEach((result, index) => {
+      if (result.status === 'fulfilled' && result.value) {
+        const { symbol, stock } = result.value;
+        resultMap.set(symbol, stock);
+      }
+    });
+    
+    // 批次之間添加延遲（最後一批不需要延遲）
+    if (batchIndex < batches.length - 1) {
+      await delay(BATCH_DELAY);
     }
-  });
-
+    
+    if (import.meta.env.DEV) {
+      console.log(`批次 ${batchIndex + 1}/${batches.length} 完成，已獲取 ${resultMap.size}/${symbols.length} 個股票價格`);
+    }
+  }
+  
   return resultMap;
 }
 

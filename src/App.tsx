@@ -1067,24 +1067,27 @@ function App() {
     };
   }, [currentUser, gasUrl]); // 依賴：用戶狀態、GAS URL
 
-  // 定期更新收藏股票即時價格（每 30 秒）
+  // 定期更新收藏股票即時價格（每 60 秒，降低請求頻率避免觸發 API 402）
   useEffect(() => {
     // #region agent log
     fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:921',message:'Price update effect triggered',data:{favoritesSize:favorites.size,userStocksFromDBCount:userStocksFromDB.length,mockStocksCount:mockStocks.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
     // #endregion
-    
+
     // 更新所有股票的價格（不僅僅是收藏的股票）
     // 因為用戶可能想要看到所有股票的即時價格
-    // 立即更新一次
-    updateFavoriteStocksPrices();
+    // 延遲 2 秒後首次更新，避免頁面載入時立即發送大量請求
+    const initialTimeout = setTimeout(() => {
+      updateFavoriteStocksPrices();
+    }, 2000);
 
-    // 設置每 30 秒自動刷新
+    // 設置每 60 秒自動刷新（從 30 秒改為 60 秒，降低請求頻率）
     const intervalId = setInterval(() => {
       // 更新所有股票的價格
       updateFavoriteStocksPrices();
-    }, 30000); // 30 秒
+    }, 60000); // 60 秒（降低頻率避免觸發 API 402）
 
     return () => {
+      clearTimeout(initialTimeout);
       clearInterval(intervalId);
     };
   }, [favorites, currentUser, userStocksFromDB, updateFavoriteStocksPrices]);
