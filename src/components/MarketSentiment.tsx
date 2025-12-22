@@ -74,8 +74,23 @@ export function MarketSentiment({ sentiment }: MarketSentimentProps) {
   const startAngle = -90; // 向左90度：從 0（右側）改為 -90（上方）
   const endAngle = 90; // 從 180（左側）改為 90（下方）
 
-  // 計算當前指數對應的角度（0-100 映射到 -90到90度）
-  const currentAngle = startAngle + (sentiment.index / 100) * (endAngle - startAngle);
+  // 確保指數為整數，並計算當前指數對應的角度（0-100 映射到 -90到90度）
+  // 0 對應 -90度（左側/上方），100 對應 90度（右側/下方）
+  const roundedIndex = Math.round(sentiment.index);
+  const currentAngle = startAngle + (roundedIndex / 100) * (endAngle - startAngle);
+  
+  // 調試：驗證角度計算（僅開發模式）
+  if (import.meta.env.DEV) {
+    console.log('Fear & Greed Index 同步:', {
+      originalIndex: sentiment.index,
+      roundedIndex,
+      currentAngle,
+      expectedPosition: roundedIndex <= 20 ? 'Extreme Fear (Red)' :
+                       roundedIndex <= 40 ? 'Fear (Orange)' :
+                       roundedIndex <= 60 ? 'Neutral (Yellow)' :
+                       roundedIndex <= 80 ? 'Greed (Light Green)' : 'Extreme Greed (Dark Green)'
+    });
+  }
 
   // 計算指針三角形頂點（在 -90 度時計算，然後通過 transform 旋轉）
   // 指針頂點（指向外圓，從上方 -90 度開始）
@@ -87,20 +102,27 @@ export function MarketSentiment({ sentiment }: MarketSentimentProps) {
   const pointerBase1 = polarToCartesian(centerX, centerY, pointerBaseRadius, -90 - baseOffset);
   const pointerBase2 = polarToCartesian(centerX, centerY, pointerBaseRadius, -90 + baseOffset);
 
-  // 動畫效果：組件載入時觸發
+  // 動畫效果：組件載入時觸發，確保指針與數值同步
   useEffect(() => {
     if (pointerRef.current) {
-      pointerRef.current.style.opacity = '0';
-      pointerRef.current.style.transform = 'rotate(-90deg)';
-      setTimeout(() => {
-        if (pointerRef.current) {
-          pointerRef.current.style.transition = 'opacity 0.5s ease-out, transform 1s cubic-bezier(0.4, 0, 0.2, 1)';
-          pointerRef.current.style.opacity = '1';
-          pointerRef.current.style.transform = `rotate(${currentAngle}deg)`;
-        }
-      }, 100);
+      // 使用與渲染時相同的 roundedIndex 和 currentAngle，確保完全同步
+      const roundedIndexForPointer = Math.round(sentiment.index);
+      const angleForPointer = startAngle + (roundedIndexForPointer / 100) * (endAngle - startAngle);
+      
+      // 設置平滑過渡動畫
+      pointerRef.current.style.transition = 'transform 1s cubic-bezier(0.4, 0, 0.2, 1)';
+      pointerRef.current.style.transform = `rotate(${angleForPointer}deg)`;
+      
+      // 調試：驗證指針角度（僅開發模式）
+      if (import.meta.env.DEV) {
+        console.log('指針角度設置:', {
+          roundedIndex: roundedIndexForPointer,
+          angle: angleForPointer,
+          transform: `rotate(${angleForPointer}deg)`
+        });
+      }
     }
-  }, [sentiment.index, currentAngle]);
+  }, [sentiment.index, startAngle, endAngle]);
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 sm:p-4">
@@ -145,11 +167,12 @@ export function MarketSentiment({ sentiment }: MarketSentimentProps) {
           })}
 
           {/* 灰色三角形指針 - 在中央文字之前渲染，確保指針在文字下方 */}
+          {/* 注意：指針的 transform 由 useEffect 控制，確保與 roundedIndex 同步 */}
           <g
             ref={pointerRef}
             style={{
               transformOrigin: `${centerX}px ${centerY}px`,
-              transform: `rotate(${currentAngle}deg)`,
+              // transform 由 useEffect 動態設置，不在此處設置初始值
             }}
           >
             <polygon
@@ -163,7 +186,7 @@ export function MarketSentiment({ sentiment }: MarketSentimentProps) {
 
           {/* 中心顯示區域 - 移到 SVG 內部，在指針之後渲染，確保文字在指針上方 */}
           <g>
-            {/* 指數數字 */}
+            {/* 指數數字（顯示整數） */}
             <text
               x={centerX}
               y={centerY - 8}
@@ -171,11 +194,11 @@ export function MarketSentiment({ sentiment }: MarketSentimentProps) {
               dominantBaseline="middle"
               fontSize="24"
               fontWeight="bold"
-              fill={emotionLevels.find(l => sentiment.index >= l.range[0] && sentiment.index <= l.range[1])?.color || '#eab308'}
+              fill={emotionLevels.find(l => roundedIndex >= l.range[0] && roundedIndex <= l.range[1])?.color || '#eab308'}
               className="transition-colors duration-300"
               style={{ pointerEvents: 'none' }}
             >
-              {sentiment.index}
+              {roundedIndex}
             </text>
             {/* 情緒等級文字 */}
             <text
