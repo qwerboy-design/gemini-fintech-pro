@@ -628,7 +628,9 @@ gemini-fintech-pro/
 │   ├── services/                   # 服務層
 │   │   ├── gasService.ts           # Google Apps Script 服務
 │   │   ├── stockService.ts         # 股票查詢服務
-│   │   └── geminiService.ts        # Gemini API 服務
+│   │   ├── geminiService.ts        # Gemini API 服務
+│   │   ├── finmindService.ts       # FinMind API 服務（台股價格）
+│   │   └── finnhubService.ts       # Finnhub API 服務（Fear & Greed Index）
 │   ├── types/                      # TypeScript 類型定義
 │   │   └── stock.ts                # 股票相關類型
 │   ├── App.tsx                     # 主應用組件
