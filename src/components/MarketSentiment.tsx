@@ -132,8 +132,6 @@ export function MarketSentiment({ sentiment }: MarketSentimentProps) {
               centerY
             );
 
-            // 移除文字標籤計算，因為已移除扇形區域內的文字標籤
-
             return (
               <g key={level.label}>
                 {/* 扇形區域 */}
@@ -142,7 +140,6 @@ export function MarketSentiment({ sentiment }: MarketSentimentProps) {
                   fill={level.color}
                   className="opacity-90"
                 />
-                {/* 移除文字標籤，避免與中央顯示重疊 */}
               </g>
             );
           })}
@@ -199,11 +196,3 @@ export function MarketSentiment({ sentiment }: MarketSentimentProps) {
     </div>
   );
 }
-
-
-
-
-
-
-
-

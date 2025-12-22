@@ -81,7 +81,24 @@ export async function getFearGreedIndex(): Promise<MarketSentiment | null> {
       return null;
     }
 
-    const data = (await response.json()) as FearGreedIndexResponse;
+    // 檢查響應 Content-Type，確保是 JSON
+    const contentType = response.headers.get('content-type');
+
+    if (!contentType || !contentType.includes('application/json')) {
+      // 響應不是 JSON，可能是 HTML 錯誤頁面
+      const text = await response.text();
+      console.warn('Finnhub API 返回非 JSON 響應（可能是 HTML 錯誤頁面）:', contentType);
+      console.warn('響應預覽:', text.substring(0, 200));
+      return null;
+    }
+
+    let data: FearGreedIndexResponse;
+    try {
+      data = (await response.json()) as FearGreedIndexResponse;
+    } catch (jsonError) {
+      console.error('解析 Finnhub API 響應失敗:', jsonError);
+      return null;
+    }
 
     // 提取指數值（需要根據實際 API 響應格式調整）
     let index: number;
