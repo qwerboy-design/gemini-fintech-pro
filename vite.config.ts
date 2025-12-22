@@ -10,4 +10,14 @@ export default defineConfig({
     tailwindcss(),
   ],
   base: '/gemini-fintech-pro/', // GitHub Pages 的倉庫名稱路徑
+  server: {
+    proxy: {
+      '/api/finmind': {
+        target: 'https://api.finmindtrade.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/finmind/, ''),
+        secure: true,
+      },
+    },
+  },
 })

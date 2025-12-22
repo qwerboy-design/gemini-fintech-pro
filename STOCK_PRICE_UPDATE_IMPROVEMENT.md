@@ -289,3 +289,4 @@ VITE_FINMIND_API_KEY=your_finmind_api_key_here
 **最後更新**：2025-01-XX  
 **版本**：1.1.0  
 **狀態**：✅ 生產就緒，已驗證
+

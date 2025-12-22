@@ -47,7 +47,14 @@ export interface FinMindUsageInfo {
 export async function getStockQuote(symbol: string): Promise<Stock | null> {
   const apiKey = import.meta.env.VITE_FINMIND_API_KEY;
   
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'finmindService.ts:47',message:'getStockQuote called',data:{symbol,hasApiKey:!!apiKey},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
+  
   if (!apiKey) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'finmindService.ts:52',message:'API Key not configured',data:{symbol},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     console.warn('FinMind API Key 未配置');
     return null;
   }
@@ -55,7 +62,13 @@ export async function getStockQuote(symbol: string): Promise<Stock | null> {
   try {
     // 使用 TaiwanStockPrice 端點（日線資料，不需要贊助會員）
     // 端點：/api/v4/data，參數：dataset=TaiwanStockPrice, data_id=股票代碼, start_date=日期
-    const url = new URL('https://api.finmindtrade.com/api/v4/data');
+    // 在開發環境使用代理，生產環境直接調用（如果 API 支持 CORS）
+    const isDev = import.meta.env.DEV;
+    const baseUrl = isDev 
+      ? '/api/finmind/api/v4/data'  // 開發環境使用代理
+      : 'https://api.finmindtrade.com/api/v4/data';  // 生產環境直接調用
+    
+    const url = new URL(baseUrl, isDev ? window.location.origin : undefined);
     const today = new Date().toISOString().split('T')[0]; // 格式：YYYY-MM-DD
     
     url.searchParams.set('dataset', 'TaiwanStockPrice');
@@ -64,6 +77,10 @@ export async function getStockQuote(symbol: string): Promise<Stock | null> {
     url.searchParams.set('end_date', today);
     url.searchParams.set('token', apiKey); // token 作為查詢參數（可選，但建議提供以提高請求上限）
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'finmindService.ts:66',message:'Fetching stock quote',data:{symbol,url:url.toString(),isDev},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+
     const response = await fetch(url.toString(), {
       method: 'GET',
       headers: {
@@ -71,27 +88,47 @@ export async function getStockQuote(symbol: string): Promise<Stock | null> {
       },
     });
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'finmindService.ts:75',message:'Fetch response received',data:{symbol,status:response.status,statusText:response.statusText,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+
     if (!response.ok) {
       // 處理權限錯誤（非贊助會員）
       if (response.status === 401 || response.status === 403) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'finmindService.ts:81',message:'API permission error',data:{symbol,status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
         console.warn(`FinMind API 權限錯誤: 可能需要贊助會員才能使用即時資訊功能`);
         return null;
       }
       
       // 處理速率限制
       if (response.status === 429) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'finmindService.ts:87',message:'API rate limit',data:{symbol,status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
         console.warn('FinMind API 速率限制，請稍後再試');
         return null;
       }
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'finmindService.ts:92',message:'API request failed',data:{symbol,status:response.status,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       console.warn(`FinMind API 請求失敗: ${response.status} ${response.statusText}`);
       return null;
     }
 
     const data = (await response.json()) as FinMindQuoteResponse;
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'finmindService.ts:97',message:'API response parsed',data:{symbol,status:data.status,msg:data.msg,dataLength:data.data?.length || 0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+
     // 檢查響應狀態
     if (data.status !== 200 || !data.data || data.data.length === 0) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'finmindService.ts:102',message:'API response error',data:{symbol,status:data.status,msg:data.msg,dataLength:data.data?.length || 0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       console.warn(`FinMind API 返回錯誤: ${data.msg || '未知錯誤'}`);
       return null;
     }
@@ -99,6 +136,9 @@ export async function getStockQuote(symbol: string): Promise<Stock | null> {
     // 獲取最新的資料（通常是陣列中的最後一筆，因為按日期排序）
     const quotes = data.data;
     if (quotes.length === 0) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'finmindService.ts:109',message:'No quotes returned',data:{symbol},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       console.warn(`FinMind API 未返回 ${symbol} 的資料`);
       return null;
     }
@@ -115,6 +155,10 @@ export async function getStockQuote(symbol: string): Promise<Stock | null> {
     // 計算漲跌幅：((收盤價 - 開盤價) / 開盤價) * 100
     const change = open > 0 ? ((price - open) / open) * 100 : 0;
     
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'finmindService.ts:120',message:'Stock quote parsed successfully',data:{symbol,price,change,volume},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    
     return {
       symbol: quote.stock_id,
       name: quote.stock_id, // FinMind 可能不包含名稱，使用代碼作為 fallback
@@ -124,6 +168,9 @@ export async function getStockQuote(symbol: string): Promise<Stock | null> {
       // 其他欄位保持 undefined，由調用方補充
     };
   } catch (error) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'finmindService.ts:133',message:'getStockQuote error',data:{symbol,error:error instanceof Error ? error.message : String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
     console.error(`獲取股票 ${symbol} 報價失敗:`, error);
     return null;
   }
@@ -245,6 +292,7 @@ export async function getFinMindUsageInfo(): Promise<FinMindUsageInfo | null> {
     return null;
   }
 }
+
 
 
 

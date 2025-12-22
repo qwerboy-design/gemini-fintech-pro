@@ -97,24 +97,34 @@ export function Header({
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
     // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Header.tsx:99',message:'handleSearchSubmit called',data:{searchQuery:searchQuery.trim(),hasOnSearchSubmit:!!onSearchSubmit},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Header.tsx:99',message:'handleSearchSubmit called',data:{searchQuery:searchQuery.trim(),hasOnSearchSubmit:!!onSearchSubmit,isSearching,eventType:e.type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
     // #endregion
     
+    e.preventDefault();
+    
     if (!searchQuery.trim()) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Header.tsx:107',message:'Search query is empty, returning early',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       setShowSearch(false);
       return;
     }
     // 觸發父組件的搜尋函數
     if (onSearchSubmit) {
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Header.tsx:107',message:'Calling onSearchSubmit',data:{searchQuery:searchQuery.trim()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Header.tsx:113',message:'Calling onSearchSubmit',data:{searchQuery:searchQuery.trim()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
       // #endregion
-      onSearchSubmit();
+      try {
+        onSearchSubmit();
+      } catch (error) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Header.tsx:118',message:'onSearchSubmit error',data:{error:error instanceof Error ? error.message : String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
+      }
     } else {
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Header.tsx:110',message:'onSearchSubmit is not provided',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Header.tsx:122',message:'onSearchSubmit is not provided',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
       // #endregion
     }
   };
@@ -169,15 +179,27 @@ export function Header({
                 exit={{ opacity: 0, width: 0 }}
                 className="flex-1 max-w-md mx-4 relative"
               >
-                <form onSubmit={handleSearchSubmit} className="relative">
+                <form onSubmit={handleSearchSubmit} className="relative" onClick={(e) => {
+                  // #region agent log
+                  fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Header.tsx:172',message:'Form clicked',data:{targetTag:(e.target as HTMLElement).tagName,targetType:(e.target as HTMLElement).getAttribute('type')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                  // #endregion
+                }}>
                   <input
                     ref={searchInputRef}
                     type="text"
                     value={searchQuery}
-                    onChange={(e) => handleSearchChange(e.target.value)}
+                    onChange={(e) => {
+                      // #region agent log
+                      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Header.tsx:177',message:'Search input changed',data:{value:e.target.value,trimmedValue:e.target.value.trim()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+                      // #endregion
+                      handleSearchChange(e.target.value);
+                    }}
                     onFocus={handleSearchFocus}
                     onBlur={handleSearchBlur}
                     onKeyDown={(e) => {
+                      // #region agent log
+                      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Header.tsx:184',message:'Search input keydown',data:{key:e.key},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                      // #endregion
                       if (e.key === 'Enter') {
                         handleSearchSubmit(e);
                       }
@@ -216,6 +238,11 @@ export function Header({
                   <button
                     type="submit"
                     disabled={isSearching || !searchQuery.trim()}
+                    onClick={() => {
+                      // #region agent log
+                      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Header.tsx:216',message:'Search button clicked',data:{isSearching,searchQuery:searchQuery.trim(),isDisabled:isSearching || !searchQuery.trim(),hasOnSearchSubmit:!!onSearchSubmit},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                      // #endregion
+                    }}
                     className={`absolute right-0 top-0 bottom-0 px-4 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-r-lg transition-colors flex items-center gap-2 ${
                       isSearching ? 'opacity-50' : ''
                     }`}
@@ -357,6 +384,7 @@ export function Header({
     </header>
   );
 }
+
 
 
 

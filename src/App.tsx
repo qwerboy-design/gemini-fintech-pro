@@ -304,6 +304,8 @@ function App() {
         setQueriedStocks([result.stock]);
         // 添加到搜索歷史（addToSearchHistory 內部已有去重邏輯）
         addToSearchHistory(query);
+        // 清空搜索查詢，避免持續過濾股票列表
+        setSearchQuery('');
         
         // #region agent log
         fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:293',message:'Stock found and added to queriedStocks',data:{symbol:result.stock.symbol,name:result.stock.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
@@ -404,6 +406,10 @@ function App() {
   // 更新股票即時價格（使用 FinMind API）
   // 只查詢股票清單（mockStocks + userStocksFromDB）和收藏的股票
   const updateFavoriteStocksPrices = useCallback(async () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:408',message:'updateFavoriteStocksPrices called',data:{favoritesSize:favorites.size,userStocksFromDBCount:userStocksFromDB.length,mockStocksCount:mockStocks.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
     // 獲取需要更新價格的股票代碼列表
     // 1. 股票清單：mockStocks + userStocksFromDB（去重）
     // 2. 收藏的股票（favorites）
@@ -417,7 +423,14 @@ function App() {
     // 2. 添加收藏的股票
     favorites.forEach(symbol => symbolsToUpdate.add(symbol));
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:422',message:'Symbols to update prepared',data:{symbolsToUpdateSize:symbolsToUpdate.size,symbolsToUpdate:Array.from(symbolsToUpdate)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+
     if (symbolsToUpdate.size === 0) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:424',message:'No symbols to update, returning early',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       return;
     }
 
@@ -425,15 +438,31 @@ function App() {
 
     try {
       const symbolsArray = Array.from(symbolsToUpdate);
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:431',message:'Calling getStockQuotes',data:{symbolsArrayCount:symbolsArray.length,symbolsArray},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      
       const prices = await getStockQuotes(symbolsArray);
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:435',message:'getStockQuotes result',data:{pricesSize:prices.size,pricesSymbols:Array.from(prices.keys()),pricesData:Array.from(prices.entries()).map(([symbol,stock])=>({symbol,price:stock.price,change:stock.change}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
       
       // 完全替換價格 Map，清除舊的價格數據，只保留最新的
       setAllStocksPrices(new Map(prices));
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:439',message:'Price update completed',data:{pricesSize:prices.size},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
       
       if (import.meta.env.DEV) {
         console.log(`成功更新 ${prices.size} 筆股票價格（共 ${symbolsArray.length} 筆請求）`);
       }
     } catch (error) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:445',message:'Price update error',data:{error:error instanceof Error ? error.message : String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       console.error('更新股票價格失敗:', error);
     } finally {
       setIsLoadingFavoritePrices(false);
@@ -640,6 +669,10 @@ function App() {
   // 過濾和排序股票
   const filteredAndSortedStocks = useMemo(() => {
     try {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:641',message:'filteredAndSortedStocks start',data:{activeStrategy,userStocksFromDBCount:userStocksFromDB.length,queriedStocksCount:queriedStocks.length,mockStocksCount:mockStocks.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
       // 合併本地股票、資料庫股票和查詢到的股票
       // 使用 Map 確保每個股票代號只出現一次（以最後一個為準）
       const stocksMap = new Map<string, Stock>();
@@ -649,6 +682,10 @@ function App() {
         stocksMap.set(stock.symbol, stock);
       });
       
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:649',message:'After adding mockStocks',data:{stocksMapSize:stocksMap.size,mockStocksSymbols:mockStocks.map(s=>s.symbol)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
       // 2. 用資料庫股票覆蓋或添加（資料庫數據優先，並去重）
       if (userStocksFromDB.length > 0) {
         // 先對 userStocksFromDB 去重（保留最後一個）
@@ -657,10 +694,18 @@ function App() {
           uniqueUserStocks.set(dbStock.symbol, dbStock);
         });
         
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:656',message:'userStocksFromDB before dedup',data:{userStocksFromDBCount:userStocksFromDB.length,userStocksFromDBSymbols:userStocksFromDB.map(s=>s.symbol)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        
         // 添加到主 Map
         uniqueUserStocks.forEach((stock, symbol) => {
           stocksMap.set(symbol, stock);
         });
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:662',message:'After adding userStocksFromDB',data:{stocksMapSize:stocksMap.size,uniqueUserStocksSize:uniqueUserStocks.size,uniqueUserStocksSymbols:Array.from(uniqueUserStocks.keys())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
       }
       
       // 3. 添加查詢到的股票（優先顯示搜尋結果，覆蓋已存在的股票）
@@ -671,14 +716,26 @@ function App() {
           uniqueQueriedStocks.set(queriedStock.symbol, queriedStock);
         });
         
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:669',message:'queriedStocks before dedup',data:{queriedStocksCount:queriedStocks.length,queriedStocksSymbols:queriedStocks.map(s=>s.symbol)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        
         // 添加到主 Map（搜尋結果優先，覆蓋已存在的股票）
         uniqueQueriedStocks.forEach((stock, symbol) => {
           stocksMap.set(symbol, stock);
         });
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:675',message:'After adding queriedStocks',data:{stocksMapSize:stocksMap.size,uniqueQueriedStocksSize:uniqueQueriedStocks.size,uniqueQueriedStocksSymbols:Array.from(uniqueQueriedStocks.keys())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
       }
       
       // 轉換 Map 為陣列（此時已確保無重複）
       let stocks = Array.from(stocksMap.values());
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:681',message:'After converting Map to array',data:{stocksCount:stocks.length,stocksSymbols:stocks.map(s=>s.symbol)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
 
     // 過濾掉隱藏的股票
     stocks = stocks.filter((stock) => !hiddenStocks.has(stock.symbol));
@@ -772,8 +829,20 @@ function App() {
       }
     } else {
       // 當策略為 'all' 時，也使用 API 獲取的價格更新所有股票
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:831',message:'Before price update for all strategy',data:{stocksCount:stocks.length,stocksSymbols:stocks.map(s=>s.symbol),allStocksPricesSize:allStocksPrices.size,allStocksPricesSymbols:Array.from(allStocksPrices.keys())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
       stocks = stocks.map((stock) => {
         const realTimePrice = allStocksPrices.get(stock.symbol);
+        // #region agent log
+        if (realTimePrice) {
+          fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:838',message:'Updating stock price',data:{symbol:stock.symbol,oldPrice:stock.price,newPrice:realTimePrice.price,oldChange:stock.change,newChange:realTimePrice.change},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        } else {
+          fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:840',message:'No real-time price found for stock',data:{symbol:stock.symbol,price:stock.price},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        }
+        // #endregion
+        
         if (realTimePrice) {
           return {
             ...stock,
@@ -784,6 +853,10 @@ function App() {
         }
         return stock;
       });
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:852',message:'After price update for all strategy',data:{stocksCount:stocks.length,stocksSymbols:stocks.map(s=>s.symbol),updatedPrices:stocks.map(s=>({symbol:s.symbol,price:s.price,change:s.change}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
     }
 
     // 排序
@@ -820,11 +893,19 @@ function App() {
 
     // 最終去重：確保沒有重複的股票代碼（以防萬一）
     // 使用 Map 確保每個股票代碼只出現一次（保留最後一個）
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:821',message:'Before final deduplication',data:{stocksCount:stocks.length,stocksSymbols:stocks.map(s=>s.symbol),duplicateSymbols:stocks.map(s=>s.symbol).filter((symbol,index,arr)=>arr.indexOf(symbol)!==index)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    
     const finalStocksMap = new Map<string, Stock>();
     stocks.forEach((stock) => {
       finalStocksMap.set(stock.symbol, stock);
     });
     stocks = Array.from(finalStocksMap.values());
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:827',message:'After final deduplication',data:{stocksCount:stocks.length,stocksSymbols:stocks.map(s=>s.symbol),finalStocksMapSize:finalStocksMap.size},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
 
       return stocks;
     } catch (error) {
@@ -873,20 +954,19 @@ function App() {
 
   // 定期更新收藏股票即時價格（每 30 秒）
   useEffect(() => {
-    // 如果沒有收藏股票，跳過（無論是否登入）
-    if (favorites.size === 0) {
-      return;
-    }
-
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:921',message:'Price update effect triggered',data:{favoritesSize:favorites.size,userStocksFromDBCount:userStocksFromDB.length,mockStocksCount:mockStocks.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    
+    // 更新所有股票的價格（不僅僅是收藏的股票）
+    // 因為用戶可能想要看到所有股票的即時價格
     // 立即更新一次
     updateFavoriteStocksPrices();
 
     // 設置每 30 秒自動刷新
     const intervalId = setInterval(() => {
-      // 只要有收藏股票就更新價格（無論是否登入）
-      if (favorites.size > 0) {
-        updateFavoriteStocksPrices();
-      }
+      // 更新所有股票的價格
+      updateFavoriteStocksPrices();
     }, 30000); // 30 秒
 
     return () => {
