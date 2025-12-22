@@ -519,7 +519,7 @@ function App() {
     }
   }, [userStocksFromDB, favorites]);
 
-  // 更新 Fear and Greed Index（使用 Finnhub API）
+  // 更新 Fear and Greed Index（優先使用 CNN API，fallback 到 Finnhub API）
   const updateFearGreedIndex = useCallback(async () => {
     try {
       const sentiment = await getFearGreedIndex();
@@ -819,8 +819,22 @@ function App() {
       let stocks = Array.from(stocksMap.values());
       
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:681',message:'After converting Map to array',data:{stocksCount:stocks.length,stocksSymbols:stocks.map(s=>s.symbol)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      const duplicateSymbolsBeforeFilter = stocks.map(s => s.symbol).filter((symbol, index, arr) => arr.indexOf(symbol) !== index);
+      fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:681',message:'After converting Map to array',data:{stocksCount:stocks.length,stocksSymbols:stocks.map(s=>s.symbol),duplicateSymbols:duplicateSymbolsBeforeFilter,stocksMapSize:stocksMap.size},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
       // #endregion
+      
+      // 如果 Map 轉換後仍有重複，立即去重（這不應該發生，但作為安全措施）
+      if (duplicateSymbolsBeforeFilter.length > 0) {
+        const dedupMap = new Map<string, Stock>();
+        stocks.forEach(stock => {
+          dedupMap.set(stock.symbol, stock);
+        });
+        stocks = Array.from(dedupMap.values());
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:emergency-dedup',message:'Emergency deduplication after Map conversion',data:{beforeCount:stocks.length,afterCount:stocks.length,duplicateSymbols:duplicateSymbolsBeforeFilter},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+      }
 
     // 過濾掉隱藏的股票
     stocks = stocks.filter((stock) => !hiddenStocks.has(stock.symbol));
@@ -979,7 +993,23 @@ function App() {
     // 最終去重：確保沒有重複的股票代碼（以防萬一）
     // 使用 Map 確保每個股票代碼只出現一次（保留最後一個）
     // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:821',message:'Before final deduplication',data:{stocksCount:stocks.length,stocksSymbols:stocks.map(s=>s.symbol),duplicateSymbols:stocks.map(s=>s.symbol).filter((symbol,index,arr)=>arr.indexOf(symbol)!==index)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    const duplicateSymbolsBeforeFinal = stocks.map(s => s.symbol).filter((symbol, index, arr) => arr.indexOf(symbol) !== index);
+    const duplicateDetails = duplicateSymbolsBeforeFinal.map(symbol => {
+      const duplicates = stocks.filter(s => s.symbol === symbol);
+      return {
+        symbol,
+        count: duplicates.length,
+        sources: duplicates.map(s => ({
+          name: s.name,
+          price: s.price,
+          change: s.change,
+          isFromDB: userStocksFromDB.some(db => db.symbol === symbol),
+          isFromMock: mockStocks.some(m => m.symbol === symbol),
+          isFromQueried: queriedStocks.some(q => q.symbol === symbol)
+        }))
+      };
+    });
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:821',message:'Before final deduplication',data:{stocksCount:stocks.length,stocksSymbols:stocks.map(s=>s.symbol),duplicateSymbols:duplicateSymbolsBeforeFinal,duplicateDetails,activeStrategy,currentUser,userStocksFromDBCount:userStocksFromDB.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
     // #endregion
     
     const finalStocksMap = new Map<string, Stock>();
@@ -989,7 +1019,7 @@ function App() {
     stocks = Array.from(finalStocksMap.values());
     
     // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:827',message:'After final deduplication',data:{stocksCount:stocks.length,stocksSymbols:stocks.map(s=>s.symbol),finalStocksMapSize:finalStocksMap.size},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/b8c98d22-52ac-4284-8d1d-8e26f94e8b62',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:827',message:'After final deduplication',data:{stocksCount:stocks.length,stocksSymbols:stocks.map(s=>s.symbol),finalStocksMapSize:finalStocksMap.size,removedDuplicates:duplicateSymbolsBeforeFinal.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
     // #endregion
 
       return stocks;
