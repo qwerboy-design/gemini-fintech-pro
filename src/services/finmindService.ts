@@ -316,7 +316,7 @@ async function getStockQuotesParallel(symbols: string[]): Promise<Map<string, St
     );
     
     // 處理批次結果
-    batchResults.forEach((result, index) => {
+    batchResults.forEach((result) => {
       if (result.status === 'fulfilled' && result.value) {
         const { symbol, stock } = result.value;
         resultMap.set(symbol, stock);
