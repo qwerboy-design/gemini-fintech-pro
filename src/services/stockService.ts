@@ -6,6 +6,11 @@ import type { Stock } from '../types/stock';
  * 提供股票價格查詢功能，支持：
  * 1. 從本地數據查找
  * 2. 從外部 API 查詢（如果本地沒有）
+ * 
+ * API 優先順序：
+ * 1. 台灣證券交易所 API（上市/上櫃）- 優先使用，支援 CORS
+ * 2. 台股投資追蹤工具 API
+ * 3. 其他備用 API
  */
 
 /**
@@ -41,41 +46,151 @@ function findStockInLocalData(
 }
 
 /**
+ * 台灣證券交易所 API 響應格式
+ */
+interface TWSEApiResponse {
+  msgArray?: Array<{
+    c: string;  // 股票代碼
+    n: string;  // 股票名稱
+    z: string;  // 最新成交價
+    o: string;  // 開盤價
+    h: string;  // 最高價
+    l: string;  // 最低價
+    v: string;  // 成交量
+    p: string;  // 漲跌（絕對值）
+    u: string;  // 前一日收盤價
+    [key: string]: string | undefined;
+  }>;
+  rtcode: string;
+  rtmessage: string;
+}
+
+/**
+ * 查詢台灣證券交易所股票資訊
+ * 
+ * @param symbol 股票代碼（如 "2330"）
+ * @param market 市場類型：'tse' 上市 或 'otc' 上櫃
+ * @returns 股票資料或 null
+ */
+async function queryTWSEStock(symbol: string, market: 'tse' | 'otc'): Promise<Stock | null> {
+  try {
+    // 構建 API URL
+    const apiUrl = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${market}_${symbol}.tw`;
+    
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data: TWSEApiResponse = await response.json();
+    
+    // 驗證 API 響應
+    if (data.rtcode !== '0000') {
+      console.warn(`台灣證券交易所 API 返回錯誤: ${data.rtmessage || data.rtcode}`);
+      return null;
+    }
+
+    // 檢查 msgArray 是否存在且有效
+    if (!data.msgArray || data.msgArray.length === 0) {
+      return null;
+    }
+
+    const stockData = data.msgArray[0];
+    
+    // 驗證必要欄位
+    if (!stockData.c || !stockData.n) {
+      return null;
+    }
+
+    // 解析價格：優先使用最新成交價 (z)，如果為空或 "0" 則使用開盤價 (o)
+    const latestPrice = stockData.z && stockData.z !== '0' 
+      ? parseFloat(stockData.z) 
+      : (stockData.o && stockData.o !== '0' ? parseFloat(stockData.o) : 0);
+    
+    if (latestPrice === 0) {
+      return null;
+    }
+
+    // 計算漲跌百分比
+    // 使用前一日收盤價 (u) 計算，如果不存在則設為 0
+    const previousClose = stockData.u ? parseFloat(stockData.u) : 0;
+    const changePercent = previousClose > 0 
+      ? ((latestPrice - previousClose) / previousClose) * 100 
+      : 0;
+
+    // 解析成交量
+    const volume = stockData.v ? parseFloat(stockData.v) : undefined;
+
+    return {
+      symbol: stockData.c,
+      name: stockData.n,
+      price: latestPrice,
+      change: changePercent,
+      volume,
+      isFavorite: false,
+      // 台灣證券交易所 API 不提供以下欄位
+      marketCap: undefined,
+      chips: undefined,
+      buySellRatio: undefined,
+    };
+  } catch (error) {
+    console.warn(`查詢台灣證券交易所股票 ${symbol} (${market}) 失敗:`, error);
+    return null;
+  }
+}
+
+/**
  * 查詢股票價格（使用公開 API）
  * 
- * 注意：由於 CORS 限制，實際 API 調用可能需要通過代理或後端
- * 這裡提供一個可擴展的接口，目前使用模擬數據作為 fallback
+ * API 優先順序：
+ * 1. 台灣證券交易所 API（上市/上櫃）- 優先使用
+ * 2. 台股投資追蹤工具 API
+ * 3. 其他備用 API
  * 
- * 可用的 API 選項：
- * 1. FinMind API (https://finmind.github.io/)
- * 2. 台股投資追蹤工具 API (https://www.taiwanstock.online/)
- * 3. 自建後端代理（推薦，避免 CORS 問題）
+ * 注意：台灣證券交易所 API 支援 CORS，可以直接從瀏覽器調用
  */
 async function queryStockFromAPI(symbol: string): Promise<Stock | null> {
   try {
-    // 嘗試多個 API 端點（優先級順序）
-    const apis = [
-      // API 1: 台股投資追蹤工具（如果可用）
+    // 優先使用台灣證券交易所 API
+    // 先嘗試上市股票（tse）
+    let stock = await queryTWSEStock(symbol, 'tse');
+    if (stock) {
+      return stock;
+    }
+
+    // 如果上市股票查詢失敗，嘗試上櫃股票（otc）
+    stock = await queryTWSEStock(symbol, 'otc');
+    if (stock) {
+      return stock;
+    }
+
+    // 如果台灣證券交易所 API 都失敗，嘗試其他備用 API
+    const fallbackApis = [
+      // 台股投資追蹤工具（如果可用）
       `https://www.taiwanstock.online/api/stock/${symbol}`,
-      // API 2: FinMind（需要處理 CORS）
+      // FinMind（需要處理 CORS）
       // `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${symbol}&start_date=${new Date().toISOString().split('T')[0]}`,
     ];
 
-    for (const apiUrl of apis) {
+    for (const apiUrl of fallbackApis) {
       try {
         const response = await fetch(apiUrl, {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
           },
-          // 設置超時（通過 AbortController）
         });
 
         if (response.ok) {
           const data = await response.json();
           
           // 根據不同的 API 格式解析數據
-          // 這裡需要根據實際 API 響應格式調整
           if (data) {
             // 示例：假設 API 返回格式為 { symbol, name, price, change, volume }
             return {
@@ -93,7 +208,7 @@ async function queryStockFromAPI(symbol: string): Promise<Stock | null> {
         }
       } catch (apiError) {
         // 嘗試下一個 API
-        console.warn(`API ${apiUrl} 查詢失敗:`, apiError);
+        console.warn(`備用 API ${apiUrl} 查詢失敗:`, apiError);
         continue;
       }
     }
